@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speed Dating Online Pro</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Ekran logowania -->
+        <div id="login-screen" class="screen active">
+            <div class="logo">
+                <i class="fas fa-heart"></i>
+                <h1>Speed Dating Online Pro</h1>
+                <p class="subtitle">System dopasowań z ocenianiem</p>
+            </div>
+            
+            <div class="qr-section">
+                <h2><i class="fas fa-qrcode"></i> Dołącz do wydarzenia!</h2>
+                <div class="qr-code" id="qr-code">
+                    <p>Ładowanie kodu QR...</p>
+                </div>
+                <p class="qr-info">Zeskanuj kod QR aby dołączyć na swoim telefonie</p>
+                <div class="admin-buttons">
+                    <button id="show-admin-panel" class="btn"><i class="fas fa-cogs"></i> Panel administracyjny</button>
+                    <button id="show-results" class="btn btn-info"><i class="fas fa-chart-bar"></i> Wyniki</button>
+                </div>
+            </div>
+            
+            <div class="form-section">
+                <div class="form-card">
+                    <h2><i class="fas fa-user-plus"></i> Dołącz tutaj:</h2>
+                    <form id="participant-form">
+                        <div class="form-group">
+                            <label for="username">
+                                <i class="fas fa-user"></i> Twój login:
+                            </label>
+                            <input type="text" id="username" required placeholder="Wpisz swój login">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="email">
+                                <i class="fas fa-envelope"></i> Twój email:
+                            </label>
+                            <input type="email" id="email" required placeholder="twój@email.com">
+                            <small class="form-hint">Na ten email otrzymasz wyniki dopasowań</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label><i class="fas fa-venus-mars"></i> Twoja płeć:</label>
+                            <div class="radio-group">
+                                <label class="radio-option">
+                                    <input type="radio" name="gender" value="Kobieta" required>
+                                    <span class="radio-custom"></span>
+                                    <span class="radio-label">Kobieta</span>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="gender" value="Mężczyzna">
+                                    <span class="radio-custom"></span>
+                                    <span class="radio-label">Mężczyzna</span>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="gender" value="Nonbinary">
+                                    <span class="radio-custom"></span>
+                                    <span class="radio-label">Nonbinary</span>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label><i class="fas fa-heart"></i> Jestem zainteresowany/a:</label>
+                            <div class="checkbox-group">
+                                <label class="checkbox-option">
+                                    <input type="checkbox" name="interested" value="Kobieta">
+                                    <span class="checkbox-custom"></span>
+                                    <span class="checkbox-label">Kobietami</span>
+                                </label>
+                                <label class="checkbox-option">
+                                    <input type="checkbox" name="interested" value="Mężczyzna">
+                                    <span class="checkbox-custom"></span>
+                                    <span class="checkbox-label">Mężczyznami</span>
+                                </label>
+                                <label class="checkbox-option">
+                                    <input type="checkbox" name="interested" value="Nonbinary">
+                                    <span class="checkbox-custom"></span>
+                                    <span class="checkbox-label">Osobami nonbinary</span>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="terms-group">
+                            <label class="checkbox-option">
+                                <input type="checkbox" id="privacy-consent" required>
+                                <span class="checkbox-custom"></span>
+                                <span class="checkbox-label">Wyrażam zgodę na przetwarzanie danych i otrzymywanie dopasowań</span>
+                            </label>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-sign-in-alt"></i> Dołącz do wydarzenia
+                        </button>
+                    </form>
+                </div>
+                
+                <div class="participants-card">
+                    <h3><i class="fas fa-users"></i> Uczestnicy (<span id="participant-count">0</span>):</h3>
+                    <div id="participants-container">
+                        <p class="no-participants">Brak uczestników</p>
+                    </div>
+                    <div class="event-stats">
+                        <div class="stat-item">
+                            <i class="fas fa-female"></i>
+                            <span>Kobiet: <span id="female-count">0</span></span>
+                        </div>
+                        <div class="stat-item">
+                            <i class="fas fa-male"></i>
+                            <span>Mężczyzn: <span id="male-count">0</span></span>
+                        </div>
+                        <div class="stat-item">
+                            <i class="fas fa-transgender-alt"></i>
+                            <span>Nonbinary: <span id="nonbinary-count">0</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Panel administracyjny -->
+        <div id="admin-screen" class="screen">
+            <div class="header">
+                <h2><i class="fas fa-cogs"></i> Panel administracyjny</h2>
+                <div class="admin-actions">
+                    <button id="back-to-login-from-admin" class="btn">
+                        <i class="fas fa-arrow-left"></i> Powrót
+                    </button>
+                    <button id="refresh-admin" class="btn">
+                        <i class="fas fa-sync-alt"></i> Odśwież
+                    </button>
+                </div>
+            </div>
+            
+            <div class="admin-panel">
+                <div class="admin-section">
+                    <h3><i class="fas fa-users-cog"></i> Zarządzanie wydarzeniem</h3>
+                    <div class="admin-controls">
+                        <button id="start-pairing" class="btn btn-primary">
+                            <i class="fas fa-play"></i> Rozpocznij dobieranie par
+                        </button>
+                        <button id="stop-event" class="btn btn-warning">
+                            <i class="fas fa-stop"></i> Zakończ wydarzenie
+                        </button>
+                        <button id="export-excel" class="btn btn-success">
+                            <i class="fas fa-file-excel"></i> Eksport do Excel
+                        </button>
+                        <button id="reset-event" class="btn btn-danger">
+                            <i class="fas fa-trash"></i> Resetuj wszystko
+                        </button>
+                    </div>
+                    
+                    <div class="event-status-info">
+                        <div class="status-card">
+                            <h4>Status wydarzenia</h4>
+                            <p class="status-badge" id="event-status">Nie rozpoczęte</p>
+                            <p>Uczestnicy: <strong id="admin-participant-count">0</strong></p>
+                            <p>Aktywne oceny: <strong id="active-ratings">0</strong></p>
+                        </div>
+                        <div class="status-card">
+                            <h4>Dopasowania</h4>
+                            <p>Potencjalne pary: <strong id="potential-matches">0</strong></p>
+                            <p>Wzajemne "TAK": <strong id="mutual-yes">0</strong></p>
+                            <p>Oczekują na akceptację: <strong id="pending-matches">0</strong></p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="admin-section">
+                    <h3><i class="fas fa-clock"></i> Kontrola czasu</h3>
+                    <div class="time-controls-grid">
+                        <div class="time-control">
+                            <label for="round-duration">
+                                <i class="fas fa-hourglass-half"></i> Czas rundy (min):
+                            </label>
+                            <input type="number" id="round-duration" min="1" max="30" value="5">
+                        </div>
+                        <div class="time-control">
+                            <label for="break-duration">
+                                <i class="fas fa-coffee"></i> Przerwa (min):
+                            </label>
+                            <input type="number" id="break-duration" min="1" max="15" value="2">
+                        </div>
+                        <div class="time-control">
+                            <label for="rating-time">
+                                <i class="fas fa-star"></i> Czas na ocenę (min):
+                            </label>
+                            <input type="number" id="rating-time" min="1" max="10" value="3">
+                        </div>
+                        <button id="save-time-settings" class="btn">
+                            <i class="fas fa-save"></i> Zapisz ustawienia
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="admin-section">
+                    <h3><i class="fas fa-sliders-h"></i> Zaawansowane ustawienia</h3>
+                    <div class="settings-grid">
+                        <div class="setting-group">
+                            <label class="checkbox-option">
+                                <input type="checkbox" id="enable-break-table" checked>
+                                <span class="checkbox-custom"></span>
+                                <span>Stolik przerw</span>
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" id="allow-triples" checked>
+                                <span class="checkbox-custom"></span>
+                                <span>Zezwalaj na trójki</span>
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" id="auto-rotate">
+                                <span class="checkbox-custom"></span>
+                                <span>Auto-rotacja</span>
+                            </label>
+                        </div>
+                        <div class="setting-group">
+                            <label class="checkbox-option">
+                                <input type="checkbox" id="enable-ratings" checked>
+                                <span class="checkbox-custom"></span>
+                                <span>System oceniania</span>
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" id="auto-share-contacts">
+                                <span class="checkbox-custom"></span>
+                                <span>Auto-udostępnianie kontaktów</span>
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" id="require-notes">
+                                <span class="checkbox-custom"></span>
+                                <span>Wymagaj notatek</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="admin-section">
+                    <h3><i class="fas fa-envelope-open-text"></i> Zarządzanie dopasowaniami</h3>
+                    <div class="matches-controls">
+                        <button id="calculate-matches" class="btn">
+                            <i class="fas fa-calculator"></i> Oblicz dopasowania
+                        </button>
+                        <button id="view-matches" class="btn">
+                            <i class="fas fa-eye"></i> Zobacz wszystkie
+                        </button>
+                        <button id="approve-matches" class="btn btn-success">
+                            <i class="fas fa-check-double"></i> Zaakceptuj i wyślij
+                        </button>
+                    </div>
+                    
+                    <div class="matches-preview">
+                        <h4>Ostatnie dopasowania:</h4>
+                        <div id="matches-list"></div>
+                    </div>
+                </div>
+                
+                <div class="admin-section">
+                    <h3><i class="fas fa-chart-pie"></i> Statystyki</h3>
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <i class="fas fa-handshake"></i>
+                            <div class="stat-content">
+                                <h4>Rozegrane rozmowy</h4>
+                                <p class="stat-number" id="total-conversations">0</p>
+                            </div>
+                        </div>
+                        <div class="stat-box">
+                            <i class="fas fa-thumbs-up"></i>
+                            <div class="stat-content">
+                                <h4>Pozytywne oceny</h4>
+                                <p class="stat-number" id="positive-ratings">0</p>
+                            </div>
+                        </div>
+                        <div class="stat-box">
+                            <i class="fas fa-percentage"></i>
+                            <div class="stat-content">
+                                <h4>Wskaźnik dopasowań</h4>
+                                <p class="stat-number" id="match-rate">0%</p>
+                            </div>
+                        </div>
+                        <div class="stat-box">
+                            <i class="fas fa-envelope"></i>
+                            <div class="stat-content">
+                                <h4>Wysłane maile</h4>
+                                <p class="stat-number" id="emails-sent">0</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Ekran oceniania -->
+        <div id="rating-screen" class="screen">
+            <div class="header">
+                <h2><i class="fas fa-star"></i> Oceń rozmowę</h2>
+                <div class="rating-info">
+                    <span>Runda: <strong id="rating-round">1</strong></span>
+                    <span>Pozostały czas: <strong id="rating-timer">03:00</strong></span>
+                    <button id="skip-rating" class="btn btn-small">
+                        <i class="fas fa-forward"></i> Pomiń
+                    </button>
+                </div>
+            </div>
+            
+            <div class="rating-container">
+                <div class="rating-card">
+                    <div class="rating-header">
+                        <h3>Oceń osobę:</h3>
+                        <div class="person-info">
+                            <div class="person-avatar">
+                                <i class="fas fa-user"></i>
+                            </div>
+                            <div class="person-details">
+                                <h4 id="rate-person-name">Jan Kowalski</h4>
+                                <p class="person-gender" id="rate-person-gender">Mężczyzna</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="rating-options">
+                        <div class="rating-buttons">
+                            <button class="rating-btn rating-yes" data-rating="yes">
+                                <i class="fas fa-check-circle"></i>
+                                <span>TAK</span>
+                                <small>Chcę kontynuować kontakt</small>
+                            </button>
+                            <button class="rating-btn rating-no" data-rating="no">
+                                <i class="fas fa-times-circle"></i>
+                                <span>NIE</span>
+                                <small>Dziękuję, nie tym razem</small>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="rating-notes">
+                        <label for="rating-notes">
+                            <i class="fas fa-sticky-note"></i> Twoje notatki (tylko dla Ciebie):
+                        </label>
+                        <textarea id="rating-notes" rows="4" 
+                                  placeholder="Zapisz swoje wrażenia z rozmowy..."></textarea>
+                    </div>
+                    
+                    <div class="rating-actions">
+                        <button id="save-rating" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Zapisz ocenę
+                        </button>
+                        <button id="next-rating" class="btn" style="display: none;">
+                            <i class="fas fa-arrow-right"></i> Następna osoba
+                        </button>
+                    </div>
+                    
+                    <div class="rating-progress">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="rating-progress"></div>
+                        </div>
+                        <p>Oceniono: <span id="rated-count">0</span>/<span id="total-to-rate">0</span></p>
+                    </div>
+                </div>
+                
+                <div class="rating-summary">
+                    <h3><i class="fas fa-history"></i> Twoje dotychczasowe oceny</h3>
+                    <div id="ratings-history"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Ekran animacji stolików -->
+        <div id="animation-screen" class="screen">
+            <div class="header">
+                <h2><i class="fas fa-chair"></i> Rozmowy przy stolikach</h2>
+                <div class="controls">
+                    <button id="prev-round" class="btn btn-small">
+                        <i class="fas fa-arrow-left"></i> Wstecz
+                    </button>
+                    <span id="round-info">
+                        Runda: <span id="current-round">1</span>/<span id="total-rounds">0</span>
+                    </span>
+                    <button id="next-round" class="btn btn-small">
+                        Dalej <i class="fas fa-arrow-right"></i>
+                    </button>
+                    <div class="timer-container">
+                        <i class="fas fa-clock"></i>
+                        <span id="timer">05:00</span>
+                    </div>
+                    <button id="start-rating" class="btn btn-small btn-info">
+                        <i class="fas fa-star"></i> Oceń
+                    </button>
+                    <button id="back-to-admin" class="btn btn-small">
+                        <i class="fas fa-cogs"></i> Panel
+                    </button>
+                    <button id="start-timer" class="btn btn-small btn-success">
+                        <i class="fas fa-play"></i> Start
+                    </button>
+                </div>
+            </div>
+            
+            <div class="animation-container">
+                <div id="tables-container"></div>
+                <div id="break-table-container" class="break-table-section">
+                    <h3><i class="fas fa-coffee"></i> Stolik przerw</h3>
+                    <div id="break-table"></div>
+                </div>
+            </div>
+            
+            <div class="round-summary">
+                <div class="summary-header">
+                    <h3>Podsumowanie rundy <span id="summary-round">1</span>:</h3>
+                    <div class="stats">
+                        <span class="stat">
+                            <i class="fas fa-users"></i> 
+                            Par: <span id="pair-count">0</span>
+                        </span>
+                        <span class="stat">
+                            <i class="fas fa-user-friends"></i>
+                            Trójek: <span id="triple-count">0</span>
+                        </span>
+                        <span class="stat">
+                            <i class="fas fa-coffee"></i>
+                            Na przerwie: <span id="break-count">0</span>
+                        </span>
+                        <span class="stat">
+                            <i class="fas fa-star-half-alt"></i>
+                            Do oceny: <span id="to-rate-count">0</span>
+                        </span>
+                    </div>
+                </div>
+                <div id="pairs-container"></div>
+            </div>
+        </div>
+        
+        <!-- Ekran wyników -->
+        <div id="results-screen" class="screen">
+            <div class="header">
+                <h2><i class="fas fa-trophy"></i> Twoje wyniki</h2>
+                <button id="back-to-main" class="btn">
+                    <i class="fas fa-home"></i> Strona główna
+                </button>
+            </div>
+            
+            <div class="results-container">
+                <div class="results-card">
+                    <h3><i class="fas fa-heart"></i> Twoje dopasowania</h3>
+                    <div id="matches-results">
+                        <div class="no-matches">
+                            <i class="fas fa-search"></i>
+                            <p>Jeszcze nie masz dopasowań</p>
+                            <small>Dopasowania pojawią się po zakończeniu wydarzenia i akceptacji administratora</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="results-card">
+                    <h3><i class="fas fa-chart-line"></i> Twoje statystyki</h3>
+                    <div class="personal-stats">
+                        <div class="personal-stat">
+                            <i class="fas fa-handshake"></i>
+                            <div>
+                                <h4>Rozmowy</h4>
+                                <p id="your-conversations">0</p>
+                            </div>
+                        </div>
+                        <div class="personal-stat">
+                            <i class="fas fa-thumbs-up"></i>
+                            <div>
+                                <h4>Twoje "TAK"</h4>
+                                <p id="your-yes">0</p>
+                            </div>
+                        </div>
+                        <div class="personal-stat">
+                            <i class="fas fa-user-check"></i>
+                            <div>
+                                <h4>Otrzymane "TAK"</h4>
+                                <p id="received-yes">0</p>
+                            </div>
+                        </div>
+                        <div class="personal-stat">
+                            <i class="fas fa-percentage"></i>
+                            <div>
+                                <h4>Wzajemność</h4>
+                                <p id="mutuality-rate">0%</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="notes-section">
+                        <h4><i class="fas fa-sticky-note"></i> Twoje notatki</h4>
+                        <div id="your-notes"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modale -->
+    <div id="matches-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-handshake"></i> Wszystkie dopasowania</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="all-matches-container"></div>
+            </div>
+            <div class="modal-footer">
+                <button id="export-all-matches" class="btn btn-success">
+                    <i class="fas fa-file-excel"></i> Eksportuj wszystkie
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
