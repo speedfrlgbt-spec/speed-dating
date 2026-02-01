@@ -14,25 +14,19 @@ let eventSettings = JSON.parse(localStorage.getItem('speedDatingSettings')) || {
     breakDuration: 2,
     ratingTime: 3,
     enableBreakTable: true,
-    allowTriples: false, // ZMIENIONE: max 2 osoby przy stoliku
+    allowTriples: false,
     autoRotate: false,
     enableRatings: true,
     eventStatus: 'pending',
     matchesShared: false
 };
 
-// Timery
-let timerInterval = null;
-let timeLeft = 0;
-let isTimerRunning = false;
-let ratingTimerInterval = null;
-
-// ========== ROZPOZNANIE ROLI UŻYTKOWNIKA ==========
-function detectUserRole() {
+// ========== ROZPOZNANIE ROLI - NAJWAŻNIEJSZA FUNKCJA ==========
+function detectUserRoleAndShowView() {
     const urlParams = new URLSearchParams(window.location.search);
-    
-    // Sprawdź czy użytkownik jest zalogowanym uczestnikiem
     const savedUser = localStorage.getItem('currentUser');
+    
+    // 1. SPRAWDŹ CZY TO ZALOGOWANY UCZESTNIK
     if (savedUser) {
         currentUser = JSON.parse(savedUser);
         const exists = participants.find(p => p.id === currentUser.id);
@@ -40,526 +34,503 @@ function detectUserRole() {
             localStorage.removeItem('currentUser');
             currentUser = null;
         } else {
-            // Zalogowany uczestnik - pokaż jego panel
+            // UCZESTNIK JEST ZALOGOWANY - pokaż JEGO panel
             showParticipantDashboard();
-            return 'participant';
+            return;
         }
     }
     
-    // Sprawdź czy to nowy uczestnik przez parametr URL
+    // 2. SPRAWDŹ CZY TO NOWY UCZESTNIK (?participant w URL)
     if (urlParams.has('participant')) {
-        if (!currentUser) {
-            showRegistrationScreen();
-        }
-        return 'new_participant';
+        showRegistrationScreen(); // POKAŻ TYLKO FORMULARZ REJESTRACJI
+        return;
     }
     
-    // Jeśli nie ma parametru i nie jest zalogowany - to administrator
-    return 'admin';
+    // 3. TO JEST ADMINISTRATOR - pokaż pełną aplikację
+    showAdminApplication();
 }
 
 // ========== WIDOKI DLA UCZESTNIKÓW ==========
 function showRegistrationScreen() {
-    // Ukryj wszystkie ekrany
-    document.querySelectorAll('.screen').forEach(screen => {
-        screen.classList.remove('active');
-    });
-    
-    // Pokazuj tylko formularz rejestracji
+    // UKRYJ WSZYSTKO, POKAŻ TYLKO FORMULARZ
+    hideAllScreens();
     document.getElementById('login-screen').classList.add('active');
     
-    // Ukryj przyciski admina i wyniki dla uczestników
-    document.querySelector('.admin-buttons').style.display = 'none';
+    // UKRYJ elementy admina
+    document.querySelector('.qr-section').style.display = 'none';
     document.querySelector('.participants-card').style.display = 'none';
     
-    // Zmień nagłówek dla uczestników
+    // Zmień nagłówek
     document.querySelector('.logo h1').textContent = 'Rejestracja - Speed Dating';
-    document.querySelector('.subtitle').textContent = 'Dołącz do wydarzenia w 30 sekund!';
+    document.querySelector('.subtitle').textContent = 'Dołącz do wydarzenia!';
+    
+    // Ukryj przyciski admina w formularzu
+    const adminButtons = document.querySelector('.admin-buttons');
+    if (adminButtons) adminButtons.style.display = 'none';
 }
 
 function showParticipantDashboard() {
-    // Ukryj wszystkie ekrany
-    document.querySelectorAll('.screen').forEach(screen => {
-        screen.classList.remove('active');
-    });
+    hideAllScreens();
     
-    // Sprawdź czy wydarzenie jest aktywne
-    if (eventSettings.eventStatus === 'active' && allPairings.length > 0) {
-        // Pokazuj widok stolika uczestnika
-        showMyTable();
-    } else if (eventSettings.eventStatus === 'completed') {
-        // Pokazuj wyniki jeśli wydarzenie zakończone
-        showParticipantResults();
-    } else {
-        // Pokazuj ekran oczekiwania
+    if (eventSettings.eventStatus === 'pending') {
+        // Wydarzenie jeszcze się nie zaczęło
         showWaitingScreen();
+    } else if (eventSettings.eventStatus === 'active') {
+        // Wydarzenie trwa - pokaż stolik uczestnika
+        showMyTable();
+    } else {
+        // Wydarzenie zakończone
+        showParticipantResults();
     }
 }
 
 function showWaitingScreen() {
-    // Utwórz ekran oczekiwania dla uczestników
-    document.getElementById('login-screen').classList.add('active');
+    // Ekran oczekiwania dla uczestnika
+    const screen = createParticipantScreen('waiting');
     
-    // Zmień zawartość ekranu logowania na oczekiwanie
-    const loginScreen = document.getElementById('login-screen');
-    loginScreen.innerHTML = `
+    screen.innerHTML = `
         <div class="logo">
             <i class="fas fa-clock" style="color:#6a11cb; font-size:48px;"></i>
             <h1>Witaj ${currentUser.username}!</h1>
             <p class="subtitle">Czekamy na rozpoczęcie wydarzenia</p>
         </div>
         
-        <div class="waiting-info" style="text-align:center; padding:40px;">
-            <div style="background:#f8f9fa; padding:30px; border-radius:15px; max-width:500px; margin:0 auto;">
-                <h3><i class="fas fa-info-circle"></i> Informacja</h3>
-                <p>Wydarzenie jeszcze się nie rozpoczęło. Organizator poinformuje Cię, kiedy będziesz mógł dołączyć do rozmów.</p>
-                <p><strong>Twoje dane:</strong></p>
-                <ul style="text-align:left; margin:20px 0;">
-                    <li>Login: <strong>${currentUser.username}</strong></li>
-                    <li>Email: <strong>${currentUser.email}</strong></li>
-                    <li>Płeć: <strong>${currentUser.gender}</strong></li>
-                    <li>Zainteresowania: <strong>${currentUser.interested.join(', ')}</strong></li>
-                </ul>
-                <button id="logout-participant" class="btn" style="margin-top:20px;">
-                    <i class="fas fa-sign-out-alt"></i> Wyloguj się
-                </button>
+        <div class="participant-card">
+            <h3><i class="fas fa-info-circle"></i> Twoje dane rejestracyjne</h3>
+            <div class="user-data">
+                <p><strong>Login:</strong> ${currentUser.username}</p>
+                <p><strong>Email:</strong> ${currentUser.email}</p>
+                <p><strong>Płeć:</strong> ${currentUser.gender}</p>
+                <p><strong>Zainteresowania:</strong> ${currentUser.interested.join(', ')}</p>
             </div>
+            <p class="info-text">Organizator poinformuje Cię, kiedy wydarzenie się rozpocznie. 
+            Wtedy zobaczysz swój stolik i będziesz mógł oceniać rozmowy.</p>
+            
+            <button id="participant-logout" class="participant-btn">
+                <i class="fas fa-sign-out-alt"></i> Wyloguj się
+            </button>
         </div>
     `;
     
-    document.getElementById('logout-participant').addEventListener('click', function() {
-        localStorage.removeItem('currentUser');
-        currentUser = null;
-        location.href = location.pathname + '?participant';
-    });
+    document.getElementById('participant-logout').addEventListener('click', logoutParticipant);
 }
 
 function showMyTable() {
     // Znajdź stolik uczestnika w aktualnej rundzie
     const roundData = allPairings[currentRound - 1];
-    let myTable = null;
-    let seatNumber = 0;
-    
-    // Szukaj w parach
-    roundData.pairs.forEach((pair, tableIndex) => {
-        const participantIndex = pair.findIndex(p => p.id === currentUser.id);
-        if (participantIndex !== -1) {
-            myTable = {
-                type: 'pair',
-                tableNumber: tableIndex + 1,
-                people: pair,
-                myIndex: participantIndex
-            };
-            seatNumber = participantIndex + 1;
-        }
-    });
-    
-    // Jeśli nie znaleziono w parach, sprawdź stolik przerw
-    if (!myTable && roundData.breakTable) {
-        const breakIndex = roundData.breakTable.findIndex(p => p.id === currentUser.id);
-        if (breakIndex !== -1) {
-            myTable = {
-                type: 'break',
-                tableNumber: 0,
-                people: roundData.breakTable,
-                myIndex: breakIndex
-            };
-        }
-    }
-    
-    // Utwórz ekran widoku stolika
-    const screen = document.createElement('div');
-    screen.className = 'screen active';
-    screen.id = 'participant-table-screen';
-    screen.style.padding = '20px';
-    
-    let tableHTML = '';
-    
-    if (myTable) {
-        if (myTable.type === 'break') {
-            // Stolik przerw
-            tableHTML = `
-                <div class="logo" style="text-align:center;">
-                    <i class="fas fa-coffee" style="color:#ff9800; font-size:48px;"></i>
-                    <h1>Runda ${currentRound}</h1>
-                    <p class="subtitle">Masz przerwę w tej rundzie</p>
-                </div>
-                
-                <div style="background:#fff8e1; border:2px dashed #ffc107; border-radius:15px; padding:30px; margin:30px auto; max-width:600px; text-align:center;">
-                    <h3><i class="fas fa-coffee"></i> Stolik przerw</h3>
-                    <p>W tej rundzie nie masz przypisanego rozmówcy. Możesz odpocząć lub porozmawiać z innymi osobami na przerwie:</p>
-                    <div style="margin:20px 0;">
-                        ${roundData.breakTable.map(p => `
-                            <div style="background:white; padding:15px; margin:10px; border-radius:10px; display:inline-block;">
-                                <strong>${p.username}</strong> (${p.gender})
-                            </div>
-                        `).join('')}
-                    </div>
-                    <p style="color:#666; font-style:italic;">Następna runda za: <span id="round-timer">05:00</span></p>
-                </div>
-            `;
-        } else {
-            // Normalny stolik
-            const otherPerson = myTable.people[myTable.myIndex === 0 ? 1 : 0];
-            
-            tableHTML = `
-                <div class="logo" style="text-align:center;">
-                    <i class="fas fa-chair" style="color:#4CAF50; font-size:48px;"></i>
-                    <h1>Runda ${currentRound}</h1>
-                    <p class="subtitle">Czas na rozmowę!</p>
-                </div>
-                
-                <div style="max-width:600px; margin:0 auto;">
-                    <div style="background:#4CAF50; color:white; padding:20px; border-radius:15px 15px 0 0; text-align:center;">
-                        <h3><i class="fas fa-table"></i> Stolik ${myTable.tableNumber}</h3>
-                        <p>Czas rozmowy: ${eventSettings.roundDuration} minut</p>
-                    </div>
-                    
-                    <div style="display:flex; justify-content:space-around; padding:40px 20px; background:#f8f9fa; border-radius:0 0 15px 15px;">
-                        <div style="text-align:center;">
-                            <div style="width:100px; height:100px; background:#6a11cb; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 15px; color:white; font-size:36px;">
-                                <i class="fas fa-user"></i>
-                            </div>
-                            <h4>Ty</h4>
-                            <p><strong>${currentUser.username}</strong></p>
-                            <small>${currentUser.gender}</small>
-                            <div style="margin-top:10px; padding:5px 10px; background:#e9ecef; border-radius:10px;">
-                                Miejsce ${seatNumber}
-                            </div>
-                        </div>
-                        
-                        <div style="text-align:center; align-self:center;">
-                            <i class="fas fa-heart" style="font-size:24px; color:#e91e63;"></i>
-                            <p style="margin-top:10px; font-size:14px;">Rozmawiajcie!</p>
-                        </div>
-                        
-                        <div style="text-align:center;">
-                            <div style="width:100px; height:100px; background:#2575fc; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 15px; color:white; font-size:36px;">
-                                <i class="fas fa-user"></i>
-                            </div>
-                            <h4>Twój rozmówca</h4>
-                            <p><strong>${otherPerson.username}</strong></p>
-                            <small>${otherPerson.gender}</small>
-                            <div style="margin-top:10px; padding:5px 10px; background:#e9ecef; border-radius:10px;">
-                                Miejsce ${seatNumber === 1 ? 2 : 1}
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div style="text-align:center; margin-top:30px;">
-                        <div style="display:inline-block; background:#e3f2fd; padding:15px 30px; border-radius:10px;">
-                            <i class="fas fa-clock"></i>
-                            <span style="font-size:24px; font-weight:bold; margin-left:10px;" id="conversation-timer">${eventSettings.roundDuration}:00</span>
-                            <p style="margin-top:5px; color:#666;">Pozostały czas rozmowy</p>
-                        </div>
-                    </div>
-                    
-                    <div style="text-align:center; margin-top:40px;">
-                        <button id="start-rating-btn" class="btn btn-primary" style="padding:15px 40px; font-size:18px;">
-                            <i class="fas fa-star"></i> Oceń rozmowę (dostępne po sygnale)
-                        </button>
-                        <p style="margin-top:10px; color:#666; font-size:14px;">Przycisk będzie aktywny po zakończeniu czasu rozmowy</p>
-                    </div>
-                </div>
-            `;
-            
-            // Timer rozmowy
-            let conversationTimeLeft = eventSettings.roundDuration * 60;
-            const timerElement = document.getElementById('conversation-timer');
-            const updateTimer = () => {
-                const minutes = Math.floor(conversationTimeLeft / 60);
-                const seconds = conversationTimeLeft % 60;
-                timerElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-                
-                if (conversationTimeLeft <= 0) {
-                    clearInterval(timerInterval);
-                    document.getElementById('start-rating-btn').disabled = false;
-                    document.getElementById('start-rating-btn').innerHTML = '<i class="fas fa-star"></i> Oceń rozmowę TERAZ';
-                    document.getElementById('start-rating-btn').style.background = '#28a745';
-                }
-                conversationTimeLeft--;
-            };
-            
-            timerInterval = setInterval(updateTimer, 1000);
-            updateTimer();
-        }
-        
-        // Przycisk wylogowania
-        tableHTML += `
-            <div style="text-align:center; margin-top:40px;">
-                <button id="participant-logout" class="btn">
-                    <i class="fas fa-sign-out-alt"></i> Wyloguj się
-                </button>
-            </div>
-        `;
-        
-    } else {
-        // Błąd - użytkownik nie ma przypisanego stolika
-        tableHTML = `
-            <div style="text-align:center; padding:50px;">
-                <i class="fas fa-exclamation-triangle" style="font-size:48px; color:#ff9800;"></i>
-                <h2>Nie znaleziono przypisania</h2>
-                <p>Nie masz przypisanego stolika w tej rundzie. Skontaktuj się z organizatorem.</p>
-                <button id="go-back-participant" class="btn" style="margin-top:20px;">
-                    <i class="fas fa-arrow-left"></i> Powrót
-                </button>
-            </div>
-        `;
-    }
-    
-    screen.innerHTML = tableHTML;
-    
-    // Dodaj ekran do body
-    document.querySelector('.container').appendChild(screen);
-    
-    // Dodaj event listeners
-    if (document.getElementById('participant-logout')) {
-        document.getElementById('participant-logout').addEventListener('click', function() {
-            localStorage.removeItem('currentUser');
-            location.href = location.pathname + '?participant';
-        });
-    }
-    
-    if (document.getElementById('go-back-participant')) {
-        document.getElementById('go-back-participant').addEventListener('click', function() {
-            showParticipantDashboard();
-        });
-    }
-    
-    if (document.getElementById('start-rating-btn')) {
-        document.getElementById('start-rating-btn').addEventListener('click', function() {
-            startRatingForParticipant(otherPerson);
-        });
-    }
-}
-
-function startRatingForParticipant(otherPerson) {
-    // Przenieś uczestnika do ekranu oceniania
-    const screen = document.getElementById('participant-table-screen');
-    if (screen) screen.remove();
-    
-    // Pokaż ekran oceniania (uproszczona wersja)
-    document.getElementById('rating-screen').classList.add('active');
-    
-    // Ustaw osobę do oceny
-    document.getElementById('rate-person-name').textContent = otherPerson.username;
-    document.getElementById('rate-person-gender').textContent = otherPerson.gender;
-    
-    // Dostosuj ekran oceniania dla uczestnika
-    document.querySelector('.rating-header h3').textContent = 'Oceń swojego rozmówcę';
-    document.getElementById('next-rating').style.display = 'none';
-    document.getElementById('skip-rating').style.display = 'none';
-    
-    // Zmień akcję zapisu oceny
-    const saveButton = document.getElementById('save-rating');
-    saveButton.innerHTML = '<i class="fas fa-check"></i> Zapisz ocenę i zakończ';
-    saveButton.onclick = function() {
-        saveParticipantRating(otherPerson);
-    };
-}
-
-function saveParticipantRating(otherPerson) {
-    const selectedBtn = document.querySelector('.rating-btn.active');
-    if (!selectedBtn && eventSettings.requireNotes) {
-        alert('Wybierz ocenę (TAK lub NIE) przed zapisaniem!');
+    if (!roundData) {
+        showWaitingScreen();
         return;
     }
     
-    const ratingValue = selectedBtn ? selectedBtn.dataset.rating : 'no';
-    const notes = document.getElementById('rating-notes').value || "Brak notatki";
+    let myTableInfo = null;
+    
+    // Szukaj w parach
+    roundData.pairs.forEach((pair, tableIndex) => {
+        const userIndex = pair.findIndex(p => p.id === currentUser.id);
+        if (userIndex !== -1) {
+            myTableInfo = {
+                type: 'pair',
+                tableNumber: tableIndex + 1,
+                partner: pair[userIndex === 0 ? 1 : 0],
+                mySeat: userIndex + 1
+            };
+        }
+    });
+    
+    // Jeśli nie w parach, sprawdź stolik przerw
+    if (!myTableInfo && roundData.breakTable) {
+        const breakIndex = roundData.breakTable.findIndex(p => p.id === currentUser.id);
+        if (breakIndex !== -1) {
+            myTableInfo = {
+                type: 'break',
+                tableNumber: 0,
+                partner: null,
+                breakPeople: roundData.breakTable
+            };
+        }
+    }
+    
+    const screen = createParticipantScreen('table');
+    
+    if (myTableInfo && myTableInfo.type === 'pair') {
+        // POKAŻ STOLIK Z ROZMÓWCĄ
+        screen.innerHTML = `
+            <div class="logo">
+                <i class="fas fa-chair" style="color:#4CAF50; font-size:48px;"></i>
+                <h1>Runda ${currentRound}</h1>
+                <p class="subtitle">Czas na rozmowę!</p>
+            </div>
+            
+            <div class="table-container">
+                <div class="table-header">
+                    <h3><i class="fas fa-table"></i> Stolik ${myTableInfo.tableNumber}</h3>
+                    <p class="timer">Czas: <span id="conversation-timer">${eventSettings.roundDuration}:00</span></p>
+                </div>
+                
+                <div class="seats-container">
+                    <div class="seat your-seat">
+                        <div class="seat-label">Ty (Miejsce ${myTableInfo.mySeat})</div>
+                        <div class="seat-content">
+                            <i class="fas fa-user"></i>
+                            <h4>${currentUser.username}</h4>
+                            <small>${currentUser.gender}</small>
+                        </div>
+                    </div>
+                    
+                    <div class="vs-circle">
+                        <i class="fas fa-heart"></i>
+                    </div>
+                    
+                    <div class="seat partner-seat">
+                        <div class="seat-label">Rozmówca (Miejsce ${myTableInfo.mySeat === 1 ? 2 : 1})</div>
+                        <div class="seat-content">
+                            <i class="fas fa-user"></i>
+                            <h4>${myTableInfo.partner.username}</h4>
+                            <small>${myTableInfo.partner.gender}</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="table-instructions">
+                    <p><i class="fas fa-clock"></i> Masz ${eventSettings.roundDuration} minut na rozmowę.</p>
+                    <p><i class="fas fa-star"></i> Po sygnale ocenisz tę osobę.</p>
+                </div>
+                
+                <div class="action-buttons">
+                    <button id="rate-now-btn" class="participant-btn primary-btn" disabled>
+                        <i class="fas fa-hourglass-half"></i> Oceń rozmówcę (dostępne po czasie)
+                    </button>
+                    <button id="view-instructions" class="participant-btn secondary-btn">
+                        <i class="fas fa-question-circle"></i> Instrukcja
+                    </button>
+                </div>
+            </div>
+            
+            <button id="table-logout" class="logout-btn">
+                <i class="fas fa-sign-out-alt"></i> Wyloguj się
+            </button>
+        `;
+        
+        // Timer rozmowy
+        let timeLeft = eventSettings.roundDuration * 60;
+        const timerElement = document.getElementById('conversation-timer');
+        const rateButton = document.getElementById('rate-now-btn');
+        
+        const timerInterval = setInterval(() => {
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            timerElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                rateButton.disabled = false;
+                rateButton.innerHTML = '<i class="fas fa-star"></i> Oceń rozmówcę TERAZ!';
+                rateButton.classList.add('active-btn');
+            }
+            timeLeft--;
+        }, 1000);
+        
+        // Event listener do oceny
+        rateButton.addEventListener('click', () => {
+            showRatingScreen(myTableInfo.partner);
+        });
+        
+    } else if (myTableInfo && myTableInfo.type === 'break') {
+        // POKAŻ STOLIK PRZERWY
+        screen.innerHTML = `
+            <div class="logo">
+                <i class="fas fa-coffee" style="color:#ff9800; font-size:48px;"></i>
+                <h1>Runda ${currentRound}</h1>
+                <p class="subtitle">Masz przerwę w tej rundzie</p>
+            </div>
+            
+            <div class="break-container">
+                <h3><i class="fas fa-coffee"></i> Stolik przerw</h3>
+                <p>W tej rundzie nie masz przypisanego rozmówcy. Możesz odpocząć lub porozmawiać z innymi osobami na przerwie:</p>
+                
+                <div class="break-people">
+                    ${myTableInfo.breakPeople.map(p => `
+                        <div class="break-person ${p.id === currentUser.id ? 'you' : ''}">
+                            <i class="fas fa-user"></i>
+                            <div>
+                                <strong>${p.username}</strong>
+                                <small>${p.gender}</small>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+                
+                <p class="next-round-info">Następna runda za: <span id="break-timer">05:00</span></p>
+            </div>
+            
+            <button id="break-logout" class="logout-btn">
+                <i class="fas fa-sign-out-alt"></i> Wyloguj się
+            </button>
+        `;
+    } else {
+        // NIE ZNALEZIONO STOLIKA
+        screen.innerHTML = `
+            <div class="logo">
+                <i class="fas fa-exclamation-triangle" style="color:#ff9800; font-size:48px;"></i>
+                <h1>Nie znaleziono stolika</h1>
+                <p class="subtitle">Skontaktuj się z organizatorem</p>
+            </div>
+            
+            <div class="error-container">
+                <p>Nie masz przypisanego stolika w tej rundzie. Możliwe przyczyny:</p>
+                <ul>
+                    <li>Wydarzenie jeszcze się nie rozpoczęło</li>
+                    <li>Administrator nie wygenerował jeszcze par</li>
+                    <li>Wystąpił błąd w przypisaniu</li>
+                </ul>
+                <button id="refresh-assignment" class="participant-btn">
+                    <i class="fas fa-sync-alt"></i> Sprawdź ponownie
+                </button>
+            </div>
+        `;
+        
+        document.getElementById('refresh-assignment').addEventListener('click', showParticipantDashboard);
+    }
+    
+    // Dodaj listener do wylogowania
+    const logoutBtn = document.querySelector('.logout-btn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', logoutParticipant);
+    }
+}
+
+function showRatingScreen(partner) {
+    const screen = createParticipantScreen('rating');
+    
+    screen.innerHTML = `
+        <div class="logo">
+            <i class="fas fa-star" style="color:#FFD700; font-size:48px;"></i>
+            <h1>Oceń rozmowę</h1>
+            <p class="subtitle">Jak oceniasz rozmowę z ${partner.username}?</p>
+        </div>
+        
+        <div class="rating-container">
+            <div class="person-to-rate">
+                <div class="person-avatar">
+                    <i class="fas fa-user"></i>
+                </div>
+                <div class="person-details">
+                    <h3>${partner.username}</h3>
+                    <p class="person-gender">${partner.gender}</p>
+                </div>
+            </div>
+            
+            <div class="rating-options">
+                <button class="rating-option yes-option" data-rating="yes">
+                    <div class="rating-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="rating-text">
+                        <h4>TAK</h4>
+                        <p>Chcę kontynuować kontakt</p>
+                    </div>
+                </button>
+                
+                <button class="rating-option no-option" data-rating="no">
+                    <div class="rating-icon">
+                        <i class="fas fa-times-circle"></i>
+                    </div>
+                    <div class="rating-text">
+                        <h4>NIE</h4>
+                        <p>Dziękuję, nie tym razem</p>
+                    </div>
+                </button>
+            </div>
+            
+            <div class="notes-section">
+                <label for="rating-notes">
+                    <i class="fas fa-sticky-note"></i> Twoje notatki (tylko dla Ciebie):
+                </label>
+                <textarea id="rating-notes" placeholder="Zapisz swoje wrażenia z rozmowy..."></textarea>
+            </div>
+            
+            <div class="rating-actions">
+                <button id="submit-rating" class="participant-btn primary-btn">
+                    <i class="fas fa-paper-plane"></i> Zapisz ocenę
+                </button>
+                <button id="skip-rating" class="participant-btn secondary-btn">
+                    <i class="fas fa-forward"></i> Pomiń ocenę
+                </button>
+            </div>
+        </div>
+    `;
+    
+    // Event listeners dla ocen
+    let selectedRating = null;
+    document.querySelectorAll('.rating-option').forEach(option => {
+        option.addEventListener('click', function() {
+            document.querySelectorAll('.rating-option').forEach(opt => opt.classList.remove('selected'));
+            this.classList.add('selected');
+            selectedRating = this.dataset.rating;
+        });
+    });
     
     // Zapisz ocenę
-    if (!currentUser.ratings) currentUser.ratings = {};
-    currentUser.ratings[otherPerson.id] = {
-        value: ratingValue,
-        notes: notes,
-        round: currentRound,
-        timestamp: new Date().toISOString()
-    };
-    
-    // Aktualizuj statystyki
-    if (ratingValue === 'yes') {
-        currentUser.given.yes = (currentUser.given.yes || 0) + 1;
-        // Znajdź osobę w głównej liście i zaktualizuj
-        const targetPerson = participants.find(p => p.id === otherPerson.id);
-        if (targetPerson) {
-            targetPerson.received.yes = (targetPerson.received.yes || 0) + 1;
+    document.getElementById('submit-rating').addEventListener('click', () => {
+        if (!selectedRating) {
+            alert('Wybierz ocenę (TAK lub NIE) przed zapisaniem!');
+            return;
         }
-    } else {
-        currentUser.given.no = (currentUser.given.no || 0) + 1;
-        const targetPerson = participants.find(p => p.id === otherPerson.id);
-        if (targetPerson) {
-            targetPerson.received.no = (targetPerson.received.no || 0) + 1;
+        
+        const notes = document.getElementById('rating-notes').value || "Brak notatki";
+        
+        // Zapisz ocenę
+        if (!currentUser.ratings) currentUser.ratings = {};
+        currentUser.ratings[partner.id] = {
+            value: selectedRating,
+            notes: notes,
+            round: currentRound,
+            timestamp: new Date().toISOString()
+        };
+        
+        // Aktualizuj statystyki
+        if (selectedRating === 'yes') {
+            currentUser.given.yes = (currentUser.given.yes || 0) + 1;
+        } else {
+            currentUser.given.no = (currentUser.given.no || 0) + 1;
         }
-    }
+        
+        // Zapisz zmiany
+        localStorage.setItem('currentUser', JSON.stringify(currentUser));
+        
+        // Znajdź i zaktualizuj w głównej liście
+        const userIndex = participants.findIndex(p => p.id === currentUser.id);
+        if (userIndex !== -1) {
+            participants[userIndex] = { ...currentUser };
+            localStorage.setItem('speedDatingParticipants', JSON.stringify(participants));
+        }
+        
+        alert(`Dziękujemy za ocenę! ${selectedRating === 'yes' ? 'Super, że się podobało!' : 'Następna rozmowa będzie lepsza!'}`);
+        showParticipantDashboard();
+    });
     
-    // Zapisz zmiany
-    localStorage.setItem('currentUser', JSON.stringify(currentUser));
-    
-    // Zaktualizuj główną listę uczestników
-    const participantIndex = participants.findIndex(p => p.id === currentUser.id);
-    if (participantIndex !== -1) {
-        participants[participantIndex] = { ...currentUser };
-        localStorage.setItem('speedDatingParticipants', JSON.stringify(participants));
-    }
-    
-    // Powrót do dashboardu uczestnika
-    alert(`Dziękujemy za ocenę! ${ratingValue === 'yes' ? 'Super, że się podobało!' : 'Następna rozmowa będzie lepsza!'}`);
-    showParticipantDashboard();
+    // Pomiń ocenę
+    document.getElementById('skip-rating').addEventListener('click', () => {
+        showParticipantDashboard();
+    });
 }
 
 function showParticipantResults() {
-    // Pokazuje wyniki dla uczestnika po zakończeniu wydarzenia
-    document.getElementById('results-screen').classList.add('active');
+    const screen = createParticipantScreen('results');
     
-    // Dostosuj wyniki dla uczestnika
-    document.getElementById('back-to-main').style.display = 'none';
+    // Oblicz statystyki
+    const givenYes = currentUser.given?.yes || 0;
+    const givenNo = currentUser.given?.no || 0;
+    const receivedYes = currentUser.received?.yes || 0;
+    const totalConversations = givenYes + givenNo;
     
-    // Dodaj przycisk wylogowania w wynikach
-    const resultsContainer = document.querySelector('.results-container');
-    const logoutBtn = document.createElement('button');
-    logoutBtn.className = 'btn';
-    logoutBtn.innerHTML = '<i class="fas fa-sign-out-alt"></i> Wyloguj się';
-    logoutBtn.style.margin = '20px auto';
-    logoutBtn.style.display = 'block';
-    logoutBtn.onclick = function() {
-        localStorage.removeItem('currentUser');
-        location.href = location.pathname + '?participant';
-    };
-    resultsContainer.appendChild(logoutBtn);
+    screen.innerHTML = `
+        <div class="logo">
+            <i class="fas fa-trophy" style="color:#FFD700; font-size:48px;"></i>
+            <h1>Twoje wyniki</h1>
+            <p class="subtitle">Wydarzenie zakończone!</p>
+        </div>
+        
+        <div class="results-container">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <i class="fas fa-handshake"></i>
+                    <h3>${totalConversations}</h3>
+                    <p>Rozegrane rozmowy</p>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-thumbs-up"></i>
+                    <h3>${givenYes}</h3>
+                    <p>Twoje "TAK"</p>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-user-check"></i>
+                    <h3>${receivedYes}</h3>
+                    <p>Otrzymane "TAK"</p>
+                </div>
+            </div>
+            
+            <div class="matches-section">
+                <h3><i class="fas fa-heart"></i> Twoje dopasowania</h3>
+                <div class="matches-list">
+                    <p class="no-matches">Dopasowania zostaną udostępnione po zatwierdzeniu przez organizatora.</p>
+                </div>
+            </div>
+            
+            <button id="results-logout" class="participant-btn primary-btn">
+                <i class="fas fa-sign-out-alt"></i> Zakończ i wyloguj się
+            </button>
+        </div>
+    `;
+    
+    document.getElementById('results-logout').addEventListener('click', logoutParticipant);
 }
 
-// ========== ZAWAŃSOWANY ALGORYTM DOBIERANIA PAR ==========
-function generateSmartPairings() {
-    allPairings = [];
-    const usedPairs = new Set();
+// ========== FUNKCJE POMOCNICZE DLA UCZESTNIKÓW ==========
+function createParticipantScreen(type) {
+    hideAllScreens();
     
-    totalRounds = calculateOptimalRounds(participants);
-    const enableBreakTable = eventSettings.enableBreakTable;
+    // Utwórz nowy ekran dla uczestnika
+    const screen = document.createElement('div');
+    screen.className = `screen active participant-screen participant-${type}`;
+    screen.id = `participant-${type}-screen`;
     
-    for (let roundNum = 1; roundNum <= totalRounds; roundNum++) {
-        const roundResult = {
-            round: roundNum,
-            pairs: [],
-            breakTable: []
-        };
-        
-        const roundParticipants = [...participants];
-        shuffleArray(roundParticipants);
-        
-        const paired = new Set();
-        
-        // KROK 1: Znajdź IDEALNE pary (wzajemne zainteresowanie + nie rozmawiali wcześniej)
-        for (let i = 0; i < roundParticipants.length; i++) {
-            if (paired.has(roundParticipants[i].id)) continue;
-            
-            let bestMatch = null;
-            let bestScore = -1;
-            
-            for (let j = i + 1; j < roundParticipants.length; j++) {
-                if (paired.has(roundParticipants[j].id)) continue;
-                
-                const pairKey = getPairKey(roundParticipants[i].id, roundParticipants[j].id);
-                if (usedPairs.has(pairKey)) continue;
-                
-                // WARUNEK 1: Czy osoby są wzajemnie zainteresowane?
-                const mutualInterest = checkMutualInterest(roundParticipants[i], roundParticipants[j]);
-                if (!mutualInterest) continue;
-                
-                // WARUNEK 2: Czy pasują do swoich preferencji?
-                const compatibilityScore = calculateCompatibility(roundParticipants[i], roundParticipants[j]);
-                
-                if (compatibilityScore > bestScore) {
-                    bestScore = compatibilityScore;
-                    bestMatch = j;
-                }
-            }
-            
-            if (bestMatch !== null) {
-                const pairKey = getPairKey(roundParticipants[i].id, roundParticipants[bestMatch].id);
-                usedPairs.add(pairKey);
-                
-                roundResult.pairs.push([
-                    roundParticipants[i], 
-                    roundParticipants[bestMatch]
-                ]);
-                
-                paired.add(roundParticipants[i].id);
-                paired.add(roundParticipants[bestMatch].id);
-            }
-        }
-        
-        // KROK 2: Dla pozostałych osób spróbuj znaleźć CHOCIAŻ JEDNOSTRONNE dopasowanie
-        const remaining = roundParticipants.filter(p => !paired.has(p.id));
-        
-        for (let i = 0; i < remaining.length; i++) {
-            if (paired.has(remaining[i].id)) continue;
-            
-            for (let j = i + 1; j < remaining.length; j++) {
-                if (paired.has(remaining[j].id)) continue;
-                
-                // Sprawdź czy przynajmniej jedna osoba jest zainteresowana drugą
-                if (checkOneWayInterest(remaining[i], remaining[j]) || 
-                    checkOneWayInterest(remaining[j], remaining[i])) {
-                    
-                    roundResult.pairs.push([remaining[i], remaining[j]]);
-                    paired.add(remaining[i].id);
-                    paired.add(remaining[j].id);
-                    break;
-                }
-            }
-        }
-        
-        // KROK 3: Osoby bez pary idą na przerwę
-        const stillUnpaired = roundParticipants.filter(p => !paired.has(p.id));
-        if (stillUnpaired.length > 0 && enableBreakTable) {
-            roundResult.breakTable = [...stillUnpaired];
-        }
-        
-        allPairings.push(roundResult);
-    }
-    
-    localStorage.setItem('speedDatingPairings', JSON.stringify(allPairings));
-    return allPairings;
+    document.querySelector('.container').appendChild(screen);
+    return screen;
 }
 
-function checkOneWayInterest(person1, person2) {
-    // Sprawdza czy person1 jest zainteresowany person2
-    return person1.interested.includes(person2.gender);
+function hideAllScreens() {
+    // Ukryj wszystkie ekrany
+    document.querySelectorAll('.screen').forEach(screen => {
+        screen.classList.remove('active');
+    });
+    
+    // Usuń ekrany uczestnika jeśli istnieją
+    document.querySelectorAll('.participant-screen').forEach(screen => {
+        screen.remove();
+    });
 }
 
-function calculateCompatibility(person1, person2) {
-    let score = 0;
-    
-    // Wzajemne zainteresowanie = najwyższy wynik
-    if (checkMutualInterest(person1, person2)) {
-        score += 100;
-    }
-    
-    // Unikaj łączenia tych samych osób
-    score += Math.random() * 10; // Losowy element dla różnorodności
-    
-    return score;
+function logoutParticipant() {
+    localStorage.removeItem('currentUser');
+    currentUser = null;
+    // Przekieruj z powrotem do rejestracji
+    window.location.href = window.location.pathname + '?participant';
 }
 
-// ========== INICJALIZACJA APLIKACJI ==========
+// ========== PANEL ADMINISTRATORA ==========
+function showAdminApplication() {
+    // Pokaż normalną aplikację z panelem admina
+    hideAllScreens();
+    document.getElementById('login-screen').classList.add('active');
+    
+    // Przywróć elementy admina
+    document.querySelector('.qr-section').style.display = 'block';
+    document.querySelector('.participants-card').style.display = 'block';
+    
+    // Przywróć oryginalny nagłówek
+    document.querySelector('.logo h1').textContent = 'Speed Dating Online Pro';
+    document.querySelector('.subtitle').textContent = 'System dopasowań z ocenianiem';
+    
+    // Pokaż przyciski admina
+    const adminButtons = document.querySelector('.admin-buttons');
+    if (adminButtons) adminButtons.style.display = 'flex';
+    
+    // Inicjalizuj pozostałe funkcje admina
+    generateQRCode();
+    updateParticipantsList();
+    loadSettings();
+    updateEventInfo();
+    setupEventListeners();
+}
+
+// ========== INICJALIZACJA ==========
 function initializeApp() {
-    const userRole = detectUserRole();
-    
-    if (userRole === 'admin' || userRole === 'new_participant') {
-        // Załaduj podstawowe elementy dla admina/rejestracji
-        generateQRCode();
-        updateParticipantsList();
-        loadSettings();
-        updateEventInfo();
-        
-        if (userRole === 'admin') {
-            setupEventListeners();
-        }
-    }
+    detectUserRoleAndShowView();
 }
 
-// ========== FUNKCJE POMOCNICZE (muszą być w script.js) ==========
+// ========== POZOSTAŁE FUNKCJE (muszą być w script.js) ==========
 function generateQRCode() {
     const participantUrl = window.location.origin + window.location.pathname + '?participant';
     const qrElement = document.getElementById('qr-code');
@@ -597,5 +568,114 @@ function calculateOptimalRounds(participantsList) {
     return Math.min(7, Math.floor(n/2));
 }
 
-// ========== URUCHOMIENIE APLIKACJI ==========
+// ========== URUCHOMIENIE ==========
 document.addEventListener('DOMContentLoaded', initializeApp);
+
+// ========== TE FUNKCJE MUSZĄ BYĆ W script.js ==========
+// (Dodaj je z poprzedniego kodu jeśli nie ma)
+function updateParticipantsList() {
+    const container = document.getElementById('participants-container');
+    const countElement = document.getElementById('participant-count');
+    
+    if (!container || !countElement) return;
+    
+    // Statystyki płci
+    const femaleCount = participants.filter(p => p.gender === 'Kobieta').length;
+    const maleCount = participants.filter(p => p.gender === 'Mężczyzna').length;
+    const nonbinaryCount = participants.filter(p => p.gender === 'Nonbinary').length;
+    
+    document.getElementById('female-count').textContent = femaleCount;
+    document.getElementById('male-count').textContent = maleCount;
+    document.getElementById('nonbinary-count').textContent = nonbinaryCount;
+    
+    countElement.textContent = participants.length;
+    
+    if (participants.length === 0) {
+        container.innerHTML = '<p class="no-participants">Brak uczestników</p>';
+        return;
+    }
+    
+    container.innerHTML = participants.map(p => `
+        <div class="participant-item">
+            <div>
+                <strong>${p.username}</strong>
+                <span class="participant-gender gender-${getGenderClass(p.gender)}">
+                    ${p.gender}
+                </span>
+                <br>
+                <small><i class="fas fa-envelope"></i> ${p.email}</small>
+            </div>
+            <div class="participant-stats">
+                <small>TAK: ${p.given?.yes || 0}</small>
+            </div>
+        </div>
+    `).join('');
+}
+
+function getGenderClass(gender) {
+    if (gender === 'Kobieta') return 'female';
+    if (gender === 'Mężczyzna') return 'male';
+    if (gender === 'Nonbinary') return 'nonbinary';
+    return '';
+}
+
+function loadSettings() {
+    // Implementuj ładowanie ustawień
+}
+
+function updateEventInfo() {
+    // Implementuj aktualizację informacji
+}
+
+function setupEventListeners() {
+    // Implementuj event listeners z poprzedniego kodu
+    const form = document.getElementById('participant-form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value.trim();
+            const email = document.getElementById('email').value.trim();
+            const gender = document.querySelector('input[name="gender"]:checked');
+            const interestedCheckboxes = document.querySelectorAll('input[name="interested"]:checked');
+            const privacyConsent = document.getElementById('privacy-consent').checked;
+            
+            if (!username || !email || !gender || interestedCheckboxes.length === 0) {
+                alert('Proszę wypełnić wszystkie pola!');
+                return;
+            }
+            
+            if (!privacyConsent) {
+                alert('Musisz wyrazić zgodę na przetwarzanie danych!');
+                return;
+            }
+            
+            const interested = Array.from(interestedCheckboxes).map(cb => cb.value);
+            const newParticipant = {
+                id: Date.now(),
+                username: username,
+                email: email,
+                gender: gender.value,
+                interested: interested,
+                joinedAt: new Date().toISOString(),
+                ratings: {},
+                notes: {},
+                received: { yes: 0, no: 0 },
+                given: { yes: 0, no: 0 }
+            };
+            
+            participants.push(newParticipant);
+            localStorage.setItem('speedDatingParticipants', JSON.stringify(participants));
+            
+            // Zapisz jako aktualnego użytkownika
+            currentUser = newParticipant;
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            
+            alert(`Witaj ${username}! Rejestracja zakończona sukcesem.`);
+            form.reset();
+            
+            // Po rejestracji pokaż ekran oczekiwania
+            showParticipantDashboard();
+        });
+    }
+}
