@@ -4,175 +4,144 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Speed Dating Pro</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
-    <!-- Ekran startowy - wykrywa czy admin czy użytkownik -->
-    <div id="start-screen" class="screen active">
-        <div class="logo">
-            <i class="fas fa-heart"></i>
-            <h1>Speed Dating Pro</h1>
-            <p id="role-text">Ładowanie...</p>
+    <!-- Ekran ładowania -->
+    <div id="loading-screen" class="screen">
+        <div class="loading-container">
+            <div class="loading-spinner">
+                <i class="fas fa-heart"></i>
+            </div>
+            <h2>Speed Dating Pro</h2>
+            <p>Ładowanie aplikacji...</p>
         </div>
-        <div id="role-content"></div>
     </div>
 
-    <!-- Ekran logowania/rejestracji (tylko dla użytkowników) -->
+    <!-- Ekran logowania/rejestracji -->
     <div id="login-screen" class="screen">
         <div class="login-container">
-            <h2><i class="fas fa-user-plus"></i> Dołącz do wydarzenia</h2>
-            <form id="register-form">
-                <input type="text" id="reg-username" placeholder="Twój login" required>
-                <input type="email" id="reg-email" placeholder="Twój email" required>
+            <div class="login-header">
+                <div class="logo">
+                    <i class="fas fa-heart"></i>
+                    <h1>Speed Dating Pro</h1>
+                </div>
+                <p class="tagline">Znajdź swoją parę!</p>
+            </div>
+
+            <form id="register-form" class="register-form">
+                <h2>Rejestracja uczestnika</h2>
                 
-                <div class="section">
-                    <label><i class="fas fa-venus-mars"></i> Twoja płeć:</label>
-                    <div class="options">
-                        <button type="button" class="option-btn" data-value="Kobieta">Kobieta</button>
-                        <button type="button" class="option-btn" data-value="Mężczyzna">Mężczyzna</button>
-                        <button type="button" class="option-btn" data-value="Nonbinary">Nonbinary</button>
-                    </div>
-                    <input type="hidden" id="reg-gender" required>
+                <div class="form-group">
+                    <label for="reg-username"><i class="fas fa-user"></i> Nazwa użytkownika</label>
+                    <input type="text" id="reg-username" placeholder="Wprowadź swój nick" required>
                 </div>
                 
-                <div class="section">
-                    <label><i class="fas fa-heart"></i> Zainteresowany/a:</label>
-                    <div class="options">
-                        <button type="button" class="option-btn multi" data-value="Kobieta">Kobietami</button>
-                        <button type="button" class="option-btn multi" data-value="Mężczyzna">Mężczyznami</button>
-                        <button type="button" class="option-btn multi" data-value="Nonbinary">Osobami nonbinary</button>
-                    </div>
-                    <input type="hidden" id="reg-interests">
+                <div class="form-group">
+                    <label for="reg-email"><i class="fas fa-envelope"></i> Adres email</label>
+                    <input type="email" id="reg-email" placeholder="twoj@email.com" required>
                 </div>
                 
-                <button type="submit" class="submit-btn">
-                    <i class="fas fa-check"></i> Zarejestruj się
-                </button>
+                <div class="form-group">
+                    <label><i class="fas fa-venus-mars"></i> Twoja płeć</label>
+                    <div id="gender-selection" class="options-container">
+                        <button type="button" class="option-btn gender-btn" data-value="male">
+                            <i class="fas fa-mars"></i> Mężczyzna
+                        </button>
+                        <button type="button" class="option-btn gender-btn" data-value="female">
+                            <i class="fas fa-venus"></i> Kobieta
+                        </button>
+                    </div>
+                    <input type="hidden" id="reg-gender" name="gender">
+                </div>
+                
+                <div class="form-group">
+                    <label><i class="fas fa-heart"></i> Szukam (możesz wybrać kilka)</label>
+                    <div id="interests-selection" class="options-container">
+                        <button type="button" class="option-btn interest-btn multi" data-value="male">
+                            <i class="fas fa-mars"></i> Mężczyzn
+                        </button>
+                        <button type="button" class="option-btn interest-btn multi" data-value="female">
+                            <i class="fas fa-venus"></i> Kobiet
+                        </button>
+                    </div>
+                    <input type="hidden" id="reg-interests" name="interests" value="[]">
+                </div>
+                
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary btn-block">
+                        <i class="fas fa-user-plus"></i> Zarejestruj się i dołącz
+                    </button>
+                </div>
+                
+                <div class="form-info">
+                    <p><i class="fas fa-info-circle"></i> Po rejestracji otrzymasz unikalny link do swojego konta.</p>
+                </div>
             </form>
         </div>
     </div>
 
-    <!-- Panel użytkownika (widzi tylko swój stolik i oceny) -->
+    <!-- Panel użytkownika -->
     <div id="user-panel" class="screen">
         <div class="user-header">
-            <h2><i class="fas fa-user"></i> Witaj, <span id="user-name"></span></h2>
-            <button id="user-logout" class="small-btn"><i class="fas fa-sign-out-alt"></i></button>
+            <div class="user-info">
+                <h1><i class="fas fa-user"></i> <span id="user-name">Użytkownik</span></h1>
+                <p>Panel uczestnika</p>
+            </div>
+            <button id="user-logout" class="btn btn-logout">
+                <i class="fas fa-sign-out-alt"></i> Wyloguj
+            </button>
         </div>
         
-        <div id="user-content">
-            <!-- Tu będzie pokazywany stolik lub ekran oczekiwania -->
+        <div id="user-content" class="user-content">
+            <!-- Zawartość ładowana dynamicznie -->
         </div>
     </div>
 
-    <!-- Panel administratora (TY widzisz WSZYSTKO) -->
-    <div id="admin-panel" class="screen">
-        <div class="admin-header">
-            <h2><i class="fas fa-crown"></i> Panel Administratora</h2>
-            <div class="admin-controls">
-                <button id="start-event" class="btn"><i class="fas fa-play"></i> Start</button>
-                <button id="next-round" class="btn"><i class="fas fa-forward"></i> Następna runda</button>
-                <button id="end-event" class="btn"><i class="fas fa-stop"></i> Zakończ</button>
-            </div>
-        </div>
-        
-        <div class="admin-sections">
-            <!-- Ustawienia czasu -->
-            <div class="admin-section">
-                <h3><i class="fas fa-clock"></i> Kontrola czasu</h3>
-                <div class="time-controls">
-                    <div>
-                        <label>Czas rundy (min):</label>
-                        <input type="number" id="round-time" value="5" min="1" max="30">
-                    </div>
-                    <div>
-                        <label>Czas oceny (min):</label>
-                        <input type="number" id="rating-time" value="2" min="1" max="10">
-                    </div>
-                    <button id="save-time" class="btn"><i class="fas fa-save"></i> Zapisz</button>
-                </div>
-                
-                <div class="timer-display">
-                    <h4>Aktualna runda: <span id="current-round-display">1</span></h4>
-                    <div class="big-timer" id="main-timer">05:00</div>
-                    <div class="timer-controls">
-                        <button id="pause-timer" class="btn"><i class="fas fa-pause"></i> Pauza</button>
-                        <button id="reset-timer" class="btn"><i class="fas fa-redo"></i> Reset</button>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Animacja stolików -->
-            <div class="admin-section">
-                <h3><i class="fas fa-chair"></i> Stoliki - Runda <span id="anim-round">1</span></h3>
-                <div id="tables-animation">
-                    <!-- Tu będzie animacja stolików -->
-                </div>
-            </div>
-            
-            <!-- Lista uczestników i dopasowania -->
-            <div class="admin-section">
-                <h3><i class="fas fa-users"></i> Uczestnicy (<span id="participant-count">0</span>)</h3>
-                <div id="participants-list">
-                    <!-- Lista uczestników -->
-                </div>
-                
-                <div class="stats">
-                    <h4>Statystyki:</h4>
-                    <div class="stat-grid">
-                        <div class="stat-box">
-                            <i class="fas fa-handshake"></i>
-                            <span>Utworzone pary: <strong id="pairs-count">0</strong></span>
-                        </div>
-                        <div class="stat-box">
-                            <i class="fas fa-coffee"></i>
-                            <span>Na przerwie: <strong id="break-count">0</strong></span>
-                        </div>
-                        <div class="stat-box">
-                            <i class="fas fa-thumbs-up"></i>
-                            <span>Oceny TAK: <strong id="yes-count">0</strong></span>
-                        </div>
-                    </div>
-                </div>
-                
-                <button id="export-data" class="btn"><i class="fas fa-download"></i> Eksportuj dane</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Ekran oceny (dla użytkowników po rozmowie) -->
+    <!-- Ekran oceniania -->
     <div id="rating-screen" class="screen">
         <div class="rating-container">
-            <h2><i class="fas fa-star"></i> Oceń rozmowę</h2>
-            <div class="person-to-rate">
-                <div class="avatar">
-                    <i class="fas fa-user"></i>
-                </div>
-                <h3 id="rate-person">Jan Kowalski</h3>
+            <div class="rating-header">
+                <h2><i class="fas fa-star"></i> Oceń rozmówcę</h2>
+                <p>Jak oceniasz rozmowę z <span id="rate-person">...</span>?</p>
             </div>
             
             <div class="rating-options">
-                <button class="rate-btn yes-btn" data-rating="yes">
-                    <i class="fas fa-check-circle"></i>
+                <button class="rate-btn" data-rating="yes">
+                    <i class="fas fa-thumbs-up"></i>
                     <span>TAK</span>
-                    <small>Chcę kontynuować kontakt</small>
+                    <p>Chcę się jeszcze spotkać</p>
                 </button>
-                <button class="rate-btn no-btn" data-rating="no">
-                    <i class="fas fa-times-circle"></i>
+                <button class="rate-btn" data-rating="no">
+                    <i class="fas fa-thumbs-down"></i>
                     <span>NIE</span>
-                    <small>Dziękuję, nie tym razem</small>
+                    <p>Nie jestem zainteresowany/a</p>
                 </button>
             </div>
             
-            <textarea id="rating-note" placeholder="Notatka (opcjonalnie)..."></textarea>
+            <div class="form-group">
+                <label for="rating-note"><i class="fas fa-comment"></i> Dodatkowe uwagi (opcjonalnie)</label>
+                <textarea id="rating-note" placeholder="Co Ci się podobało? Co mogłoby być lepiej?" rows="4"></textarea>
+            </div>
             
-            <button id="submit-rating" class="submit-btn">
-                <i class="fas fa-paper-plane"></i> Wyślij ocenę
-            </button>
+            <div class="rating-actions">
+                <button id="submit-rating" class="btn btn-primary">
+                    <i class="fas fa-paper-plane"></i> Wyślij ocenę
+                </button>
+            </div>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
-    <script src="script.js"></script>
+    <!-- Panel administratora -->
+    <div id="admin-panel" class="screen">
+        <!-- Zawartość ładowana dynamicznie przez JavaScript -->
+    </div>
+
+    <!-- Główny kontener -->
+    <div id="app-container"></div>
+
+    <script src="app.js"></script>
 </body>
 </html>
