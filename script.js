@@ -1,128 +1,210 @@
 // ============================================
-// SPEED DATING PRO - JEDNA APLIKACJA
+// SPEED DATING PRO - DZIAŁAJĄCA APLIKACJA
 // ============================================
 
 // ========== KONFIGURACJA ==========
-let participants = JSON.parse(localStorage.getItem('speedDatingParticipants')) || [];
-let eventData = JSON.parse(localStorage.getItem('speedDatingEvent')) || {
-    status: 'waiting',
-    currentRound: 1,
-    totalRounds: 3,
-    roundTime: 5,
-    ratingTime: 2,
-    pairings: [],
-    ratings: []
-};
-
+let participants = [];
+let eventData = {};
 let currentUser = null;
 let timerInterval = null;
 let timeLeft = 0;
 
+// ========== INICJALIZACJA DANYCH ==========
+function initializeData() {
+    try {
+        const storedParticipants = localStorage.getItem('speedDatingParticipants');
+        const storedEvent = localStorage.getItem('speedDatingEvent');
+        
+        participants = storedParticipants ? JSON.parse(storedParticipants) : [];
+        eventData = storedEvent ? JSON.parse(storedEvent) : {
+            status: 'waiting',
+            currentRound: 1,
+            totalRounds: 3,
+            roundTime: 5,
+            ratingTime: 2,
+            pairings: [],
+            ratings: []
+        };
+    } catch (error) {
+        console.error('Błąd ładowania danych:', error);
+        participants = [];
+        eventData = {
+            status: 'waiting',
+            currentRound: 1,
+            totalRounds: 3,
+            roundTime: 5,
+            ratingTime: 2,
+            pairings: [],
+            ratings: []
+        };
+    }
+}
+
 // ========== SESJE UŻYTKOWNIKÓW ==========
 function getUserSessionId() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const sessionId = urlParams.get('session');
-    
-    if (!sessionId) {
-        return localStorage.getItem('userSessionId');
+    try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const sessionId = urlParams.get('session');
+        
+        if (!sessionId) {
+            return localStorage.getItem('userSessionId');
+        }
+        
+        return sessionId;
+    } catch (error) {
+        console.error('Błąd pobierania sesji:', error);
+        return null;
     }
-    
-    return sessionId;
 }
 
 function setUserSessionId(sessionId) {
-    localStorage.setItem('userSessionId', sessionId);
-    
-    const url = new URL(window.location);
-    url.searchParams.set('session', sessionId);
-    window.history.replaceState({}, '', url);
+    try {
+        localStorage.setItem('userSessionId', sessionId);
+        
+        const url = new URL(window.location);
+        url.searchParams.set('session', sessionId);
+        window.history.replaceState({}, '', url);
+    } catch (error) {
+        console.error('Błąd ustawiania sesji:', error);
+    }
 }
 
 function getCurrentUser() {
-    const sessionId = getUserSessionId();
-    if (!sessionId) return null;
-    
-    return participants.find(p => p.sessionId === sessionId);
+    try {
+        const sessionId = getUserSessionId();
+        if (!sessionId || !participants || participants.length === 0) {
+            return null;
+        }
+        
+        return participants.find(p => p && p.sessionId === sessionId) || null;
+    } catch (error) {
+        console.error('Błąd pobierania użytkownika:', error);
+        return null;
+    }
 }
 
 function saveUserSession(user) {
-    const sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-    user.sessionId = sessionId;
-    setUserSessionId(sessionId);
-    return sessionId;
+    try {
+        const sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        user.sessionId = sessionId;
+        setUserSessionId(sessionId);
+        return sessionId;
+    } catch (error) {
+        console.error('Błąd zapisywania sesji:', error);
+        return null;
+    }
 }
 
-// ========== ROZPOZNANIE ROLI ==========
+// ========== GŁÓWNA FUNKCJA INICJALIZUJĄCA ==========
+function initApp() {
+    console.log('Inicjalizacja aplikacji...');
+    
+    // 1. Inicjalizuj dane
+    initializeData();
+    
+    // 2. Sprawdź czy DOM jest gotowy
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM załadowany, wykrywanie roli...');
+            detectRole();
+        });
+    } else {
+        console.log('DOM już załadowany, wykrywanie roli...');
+        detectRole();
+    }
+    
+    // 3. Dodaj globalne style
+    addGlobalStyles();
+}
+
+// ========== WYKRYWANIE ROLI ==========
 function detectRole() {
-    const urlParams = new URLSearchParams(window.location.search);
+    console.log('Wykrywanie roli użytkownika...');
     
-    // Sprawdź czy użytkownik ma aktywną sesję
-    currentUser = getCurrentUser();
-    if (currentUser) {
-        showUserPanel();
-        return;
-    }
-    
-    // Czy to admin? (brak parametru participant i session)
-    const hasParticipant = urlParams.has('participant');
-    const hasSession = urlParams.has('session');
-    
-    if (!hasParticipant && !hasSession) {
-        // To admin - pokaż start screen
-        showStartScreen();
-        return;
-    }
-    
-    // To nowy użytkownik
-    showRegistrationScreen();
-}
-
-// ========== EKRAN START DLA ADMINA ==========
-function showStartScreen() {
+    // Najpierw ukryj wszystkie ekrany
     hideAllScreens();
     
-    // Pokaż animację ładowania
-    document.getElementById('loading-screen').classList.add('active');
+    // Pokaż loading screen
+    const loadingScreen = document.getElementById('loading-screen');
+    if (loadingScreen) {
+        loadingScreen.classList.add('active');
+    }
     
-    // Po krótkim czasie przejdź do admin panelu
+    // Krótkie opóźnienie dla pewności, że DOM jest gotowy
     setTimeout(() => {
-        document.getElementById('loading-screen').classList.remove('active');
-        showAdminPanel();
-    }, 1000);
+        try {
+            const urlParams = new URLSearchParams(window.location.search);
+            const hasParticipant = urlParams.has('participant');
+            const hasSession = urlParams.has('session');
+            
+            console.log('URL params:', { hasParticipant, hasSession });
+            console.log('Uczestnicy:', participants.length);
+            
+            // Sprawdź czy użytkownik ma aktywną sesję
+            currentUser = getCurrentUser();
+            console.log('Bieżący użytkownik:', currentUser ? currentUser.username : 'brak');
+            
+            if (currentUser) {
+                console.log('Pokazuję panel użytkownika dla:', currentUser.username);
+                showUserPanel();
+                return;
+            }
+            
+            // Jeśli nie ma użytkownika i nie ma parametru participant - to admin
+            if (!hasParticipant && !hasSession) {
+                console.log('Pokazuję panel administratora');
+                showAdminPanel();
+                return;
+            }
+            
+            // Jeśli jest parametr participant lub session - pokaż rejestrację
+            console.log('Pokazuję ekran rejestracji');
+            showRegistrationScreen();
+            
+        } catch (error) {
+            console.error('Błąd w detectRole:', error);
+            // W razie błędu pokaż ekran błędu
+            showErrorScreen('Błąd ładowania aplikacji: ' + error.message);
+        }
+    }, 300);
 }
 
-// ========== REJESTRACJA UCZESTNIKA ==========
+// ========== EKRAN REJESTRACJI ==========
 function showRegistrationScreen() {
     hideAllScreens();
     
-    // Sprawdź limit
-    const activeParticipants = participants.filter(p => p.active !== false);
+    const loginScreen = document.getElementById('login-screen');
+    if (!loginScreen) {
+        showErrorScreen('Brak ekranu rejestracji w HTML');
+        return;
+    }
+    
+    loginScreen.classList.add('active');
+    
+    // Sprawdź limit uczestników
+    const activeParticipants = participants.filter(p => p && p.active !== false);
     if (activeParticipants.length >= 50) {
-        document.getElementById('login-screen').innerHTML = `
-            <div class="screen active" id="limit-screen" style="display: flex; justify-content: center; align-items: center; height: 100vh;">
-                <div style="text-align: center; max-width: 500px; padding: 30px; background: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
-                    <div style="font-size: 60px; color: #f44336; margin-bottom: 20px;">
-                        <i class="fas fa-users-slash"></i>
-                    </div>
-                    <h2 style="margin-bottom: 20px; color: #333;">Limit uczestników osiągnięty</h2>
-                    <p style="margin-bottom: 20px; color: #666; line-height: 1.6;">
-                        Niestety, osiągnięto maksymalną liczbę uczestników (50 osób).
-                        <br>Nie możesz dołączyć do tego wydarzenia.
-                    </p>
-                    <p style="font-size: 14px; color: #999;">
-                        Skontaktuj się z organizatorem w celu uzyskania więcej informacji.
-                    </p>
+        loginScreen.innerHTML = `
+            <div style="padding: 40px; text-align: center; max-width: 500px; margin: 0 auto;">
+                <div style="font-size: 60px; color: #f44336; margin-bottom: 20px;">
+                    <i class="fas fa-users-slash"></i>
                 </div>
+                <h2 style="color: #333;">Limit uczestników osiągnięty</h2>
+                <p style="color: #666; margin: 20px 0;">
+                    Niestety, osiągnięto maksymalną liczbę 50 uczestników.
+                </p>
+                <button onclick="location.reload()" class="btn">
+                    <i class="fas fa-redo"></i> Odśwież
+                </button>
             </div>
         `;
         return;
     }
     
-    // Pokaż normalny ekran rejestracji
-    document.getElementById('login-screen').classList.add('active');
-    
-    // Inicjalizacja elementów UI
-    initializeRegistrationForm();
+    // Inicjalizuj formularz rejestracji
+    setTimeout(() => {
+        initializeRegistrationForm();
+    }, 100);
 }
 
 function initializeRegistrationForm() {
@@ -131,7 +213,8 @@ function initializeRegistrationForm() {
         btn.addEventListener('click', function() {
             document.querySelectorAll('.option-btn:not(.multi)').forEach(b => b.classList.remove('selected'));
             this.classList.add('selected');
-            document.getElementById('reg-gender').value = this.dataset.value;
+            const genderInput = document.getElementById('reg-gender');
+            if (genderInput) genderInput.value = this.dataset.value;
         });
     });
     
@@ -147,24 +230,28 @@ function initializeRegistrationForm() {
     const form = document.getElementById('register-form');
     if (form) {
         form.addEventListener('submit', handleRegistration);
+    } else {
+        console.error('Formularz rejestracji nie znaleziony');
     }
 }
 
 function updateInterests() {
     const selected = Array.from(document.querySelectorAll('.option-btn.multi.selected'))
         .map(btn => btn.dataset.value);
-    document.getElementById('reg-interests').value = JSON.stringify(selected);
+    const interestsInput = document.getElementById('reg-interests');
+    if (interestsInput) {
+        interestsInput.value = JSON.stringify(selected);
+    }
 }
 
 function handleRegistration(e) {
     e.preventDefault();
     
-    const username = document.getElementById('reg-username').value.trim();
-    const email = document.getElementById('reg-email').value.trim();
-    const gender = document.getElementById('reg-gender').value;
-    const interests = document.getElementById('reg-interests').value;
+    const username = document.getElementById('reg-username')?.value?.trim();
+    const email = document.getElementById('reg-email')?.value?.trim();
+    const gender = document.getElementById('reg-gender')?.value;
+    const interests = document.getElementById('reg-interests')?.value;
     
-    // Walidacja
     if (!username || !email || !gender || !interests) {
         alert('Proszę wypełnić wszystkie pola!');
         return;
@@ -176,13 +263,13 @@ function handleRegistration(e) {
     }
     
     // Sprawdź czy email już istnieje
-    if (participants.some(p => p.email === email)) {
+    if (participants.some(p => p && p.email === email)) {
         alert('Ten adres email jest już zarejestrowany!');
         return;
     }
     
     // Sprawdź czy nazwa użytkownika już istnieje
-    if (participants.some(p => p.username === username)) {
+    if (participants.some(p => p && p.username === username)) {
         alert('Ta nazwa użytkownika jest już zajęta!');
         return;
     }
@@ -221,11 +308,18 @@ function validateEmail(email) {
 // ========== PANEL UŻYTKOWNIKA ==========
 function showUserPanel() {
     hideAllScreens();
-    document.getElementById('user-panel').classList.add('active');
     
-    // Aktualizuj nazwę użytkownika
+    const userPanel = document.getElementById('user-panel');
+    if (!userPanel) {
+        showErrorScreen('Brak panelu użytkownika w HTML');
+        return;
+    }
+    
+    userPanel.classList.add('active');
+    
+    // Aktualizuj dane użytkownika
     const userNameElement = document.getElementById('user-name');
-    if (userNameElement) {
+    if (userNameElement && currentUser) {
         userNameElement.textContent = currentUser.username;
     }
     
@@ -243,10 +337,8 @@ function updateUserContent() {
     const userContent = document.getElementById('user-content');
     if (!userContent) return;
     
-    userContent.innerHTML = '';
-    
     // Aktualizuj lastSeen
-    const userIndex = participants.findIndex(p => p.id === currentUser.id);
+    const userIndex = participants.findIndex(p => p && p.id === currentUser.id);
     if (userIndex !== -1) {
         participants[userIndex].lastSeen = new Date().toISOString();
         localStorage.setItem('speedDatingParticipants', JSON.stringify(participants));
@@ -254,24 +346,20 @@ function updateUserContent() {
     
     if (eventData.status === 'waiting') {
         userContent.innerHTML = `
-            <div class="waiting-screen">
-                <div class="waiting-icon">
+            <div style="text-align: center; padding: 40px;">
+                <div style="font-size: 60px; color: #667eea; margin-bottom: 20px;">
                     <i class="fas fa-clock"></i>
                 </div>
-                <h3>Czekamy na rozpoczęcie</h3>
-                <p>Wydarzenie jeszcze się nie rozpoczęło. Organizator poinformuje Cię, 
-                kiedy będziesz mógł dołączyć do rozmów.</p>
-                <div class="user-info">
-                    <p><strong>Twoje dane:</strong></p>
-                    <p><i class="fas fa-user"></i> Login: ${currentUser.username}</p>
-                    <p><i class="fas fa-venus-mars"></i> Płeć: ${currentUser.gender}</p>
-                    <p><i class="fas fa-heart"></i> Szukam: ${Array.isArray(currentUser.interested) ? currentUser.interested.join(', ') : currentUser.interested}</p>
-                </div>
-                <div class="session-info" style="margin-top: 20px; padding: 10px; background: #f8f9fa; border-radius: 8px;">
-                    <p style="font-size: 12px; color: #666;">
-                        <i class="fas fa-info-circle"></i> Jesteś zalogowany jako uczestnik.
-                        <br>Nie zamykaj tej karty podczas wydarzenia.
-                    </p>
+                <h3 style="color: #333; margin-bottom: 15px;">Czekamy na rozpoczęcie</h3>
+                <p style="color: #666; margin-bottom: 25px;">
+                    Wydarzenie jeszcze się nie rozpoczęło. Organizator poinformuje Cię, 
+                    kiedy będziesz mógł dołączyć do rozmów.
+                </p>
+                <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; text-align: left; max-width: 400px; margin: 0 auto;">
+                    <h4 style="color: #333; margin-bottom: 10px;">Twoje dane:</h4>
+                    <p><i class="fas fa-user" style="width: 20px; color: #667eea;"></i> <strong>Login:</strong> ${currentUser.username}</p>
+                    <p><i class="fas fa-venus-mars" style="width: 20px; color: #667eea;"></i> <strong>Płeć:</strong> ${currentUser.gender}</p>
+                    <p><i class="fas fa-heart" style="width: 20px; color: #667eea;"></i> <strong>Szukam:</strong> ${Array.isArray(currentUser.interested) ? currentUser.interested.join(', ') : currentUser.interested}</p>
                 </div>
             </div>
         `;
@@ -279,43 +367,31 @@ function updateUserContent() {
         showUserTable();
     } else {
         userContent.innerHTML = `
-            <div class="waiting-screen">
-                <div class="waiting-icon">
+            <div style="text-align: center; padding: 40px;">
+                <div style="font-size: 60px; color: #4CAF50; margin-bottom: 20px;">
                     <i class="fas fa-flag-checkered"></i>
                 </div>
-                <h3>Wydarzenie zakończone</h3>
-                <p>Dziękujemy za udział! Organizator prześle Ci wyniki dopasowań.</p>
+                <h3 style="color: #333; margin-bottom: 15px;">Wydarzenie zakończone</h3>
+                <p style="color: #666;">Dziękujemy za udział! Organizator prześle Ci wyniki dopasowań.</p>
             </div>
         `;
     }
 }
 
-function handleLogout() {
-    localStorage.removeItem('userSessionId');
-    
-    const url = new URL(window.location);
-    url.searchParams.delete('session');
-    window.history.replaceState({}, '', url);
-    
-    currentUser = null;
-    location.href = location.pathname + '?participant';
-}
-
-// ========== TIMER DLA UŻYTKOWNIKA ==========
 function showUserTable() {
     const userContent = document.getElementById('user-content');
     if (!userContent) return;
     
-    const roundPairings = eventData.pairings[eventData.currentRound - 1];
+    const roundPairings = eventData.pairings && eventData.pairings[eventData.currentRound - 1];
     
     if (!roundPairings) {
         userContent.innerHTML = `
-            <div class="waiting-screen">
-                <div class="waiting-icon">
+            <div style="text-align: center; padding: 40px;">
+                <div style="font-size: 60px; color: #667eea; margin-bottom: 20px;">
                     <i class="fas fa-random"></i>
                 </div>
-                <h3>Trwa losowanie par...</h3>
-                <p>Proszę czekać na przypisanie do stolika.</p>
+                <h3 style="color: #333;">Trwa losowanie par...</h3>
+                <p style="color: #666;">Proszę czekać na przypisanie do stolika.</p>
             </div>
         `;
         return;
@@ -325,84 +401,96 @@ function showUserTable() {
     let userTable = null;
     let partner = null;
     
-    for (const pair of roundPairings.pairs) {
-        const userInPair = pair.find(p => p.id === currentUser.id);
-        if (userInPair) {
-            partner = pair.find(p => p.id !== currentUser.id);
-            userTable = pair;
-            break;
+    if (roundPairings.pairs) {
+        for (const pair of roundPairings.pairs) {
+            if (pair && pair.find(p => p && p.id === currentUser.id)) {
+                partner = pair.find(p => p && p.id !== currentUser.id);
+                userTable = pair;
+                break;
+            }
         }
     }
     
     // Jeśli nie w parach, sprawdź przerwę
     if (!userTable && roundPairings.breakTable) {
-        const inBreak = roundPairings.breakTable.find(p => p.id === currentUser.id);
+        const inBreak = roundPairings.breakTable.find(p => p && p.id === currentUser.id);
         if (inBreak) {
             userContent.innerHTML = `
-                <div class="table-screen">
-                    <h3><i class="fas fa-coffee"></i> Przerwa - Runda ${eventData.currentRound}</h3>
-                    <p style="margin: 20px 0;">W tej rundzie masz przerwę. Możesz odpocząć lub porozmawiać z innymi osobami.</p>
-                    <div class="timer-container" style="margin: 30px 0;">
-                        <div class="table-timer" id="user-timer">${formatTime(eventData.roundTime * 60)}</div>
-                        <p style="margin-top: 10px; color: #666;">Pozostały czas rundy</p>
+                <div style="text-align: center; padding: 30px;">
+                    <h3 style="color: #333; margin-bottom: 20px;">
+                        <i class="fas fa-coffee" style="color: #FF9800;"></i> Przerwa - Runda ${eventData.currentRound}
+                    </h3>
+                    <p style="color: #666; margin-bottom: 30px;">
+                        W tej rundzie masz przerwę. Możesz odpocząć lub porozmawiać z innymi osobami.
+                    </p>
+                    <div style="font-size: 48px; font-weight: bold; color: #667eea; margin: 20px 0; font-family: monospace;">
+                        ${formatTime(eventData.roundTime * 60)}
                     </div>
+                    <p style="color: #666;">Pozostały czas rundy</p>
                 </div>
             `;
-            startUserTimer(eventData.roundTime * 60, 'user-timer');
+            startUserTimer(eventData.roundTime * 60);
             return;
         }
     }
     
     if (userTable && partner) {
         userContent.innerHTML = `
-            <div class="table-screen">
-                <h3><i class="fas fa-chair"></i> Stolik - Runda ${eventData.currentRound}</h3>
+            <div style="text-align: center; padding: 20px;">
+                <h3 style="color: #333; margin-bottom: 30px;">
+                    <i class="fas fa-chair" style="color: #667eea;"></i> Stolik - Runda ${eventData.currentRound}
+                </h3>
                 
-                <div class="table-display" style="display: flex; justify-content: center; align-items: center; gap: 40px; margin: 30px 0;">
-                    <div class="seat you" style="text-align: center; padding: 20px; border-radius: 15px; background: #f0f7ff; min-width: 150px;">
-                        <div style="font-size: 40px; color: #667eea;">
+                <div style="display: flex; justify-content: center; align-items: center; gap: 40px; margin-bottom: 40px; flex-wrap: wrap;">
+                    <div style="text-align: center; padding: 25px; border-radius: 15px; background: linear-gradient(135deg, #f0f7ff 0%, #e3f2fd 100%); width: 180px;">
+                        <div style="font-size: 50px; color: #667eea; margin-bottom: 15px;">
                             <i class="fas fa-user"></i>
                         </div>
-                        <h4 style="margin: 10px 0;">TY</h4>
-                        <p style="font-weight: bold;">${currentUser.username}</p>
-                        <p style="font-size: 12px; color: #666;">${currentUser.gender}</p>
-                        <div class="seat-number" style="margin-top: 10px; padding: 5px 10px; background: #667eea; color: white; border-radius: 10px; font-size: 12px;">Miejsce 1</div>
+                        <h4 style="color: #333; margin-bottom: 10px;">TY</h4>
+                        <p style="font-weight: bold; color: #333; margin-bottom: 5px;">${currentUser.username}</p>
+                        <p style="color: #666; font-size: 14px;">${currentUser.gender}</p>
+                        <div style="margin-top: 15px; padding: 5px 15px; background: #667eea; color: white; border-radius: 20px; font-size: 12px; display: inline-block;">
+                            Miejsce 1
+                        </div>
                     </div>
                     
-                    <div style="font-size: 50px; color: #ff6b6b;">
+                    <div style="font-size: 60px; color: #ff6b6b;">
                         <i class="fas fa-heart"></i>
                     </div>
                     
-                    <div class="seat partner" style="text-align: center; padding: 20px; border-radius: 15px; background: #fff0f0; min-width: 150px;">
-                        <div style="font-size: 40px; color: #ff6b6b;">
+                    <div style="text-align: center; padding: 25px; border-radius: 15px; background: linear-gradient(135deg, #fff0f0 0%, #ffebee 100%); width: 180px;">
+                        <div style="font-size: 50px; color: #ff6b6b; margin-bottom: 15px;">
                             <i class="fas fa-user"></i>
                         </div>
-                        <h4 style="margin: 10px 0;">ROZMÓWCA</h4>
-                        <p style="font-weight: bold;">${partner.username}</p>
-                        <p style="font-size: 12px; color: #666;">${partner.gender}</p>
-                        <div class="seat-number" style="margin-top: 10px; padding: 5px 10px; background: #ff6b6b; color: white; border-radius: 10px; font-size: 12px;">Miejsce 2</div>
+                        <h4 style="color: #333; margin-bottom: 10px;">ROZMÓWCA</h4>
+                        <p style="font-weight: bold; color: #333; margin-bottom: 5px;">${partner.username}</p>
+                        <p style="color: #666; font-size: 14px;">${partner.gender}</p>
+                        <div style="margin-top: 15px; padding: 5px 15px; background: #ff6b6b; color: white; border-radius: 20px; font-size: 12px; display: inline-block;">
+                            Miejsce 2
+                        </div>
                     </div>
                 </div>
                 
-                <div class="timer-container" style="margin: 30px 0;">
-                    <div class="table-timer" id="user-timer">${formatTime(eventData.roundTime * 60)}</div>
-                    <p style="margin-top: 10px; color: #666;">Pozostały czas rozmowy</p>
+                <div style="margin-bottom: 30px;">
+                    <div style="font-size: 48px; font-weight: bold; color: #667eea; margin: 20px 0; font-family: monospace;" id="user-timer">
+                        ${formatTime(eventData.roundTime * 60)}
+                    </div>
+                    <p style="color: #666;">Pozostały czas rozmowy</p>
                 </div>
                 
-                <button id="start-rating-btn" class="btn" disabled style="margin-top: 20px; padding: 15px 30px; font-size: 16px;">
+                <button id="start-rating-btn" class="btn" disabled style="padding: 15px 40px; font-size: 16px;">
                     <i class="fas fa-hourglass-half"></i> Oceń po zakończeniu czasu
                 </button>
             </div>
         `;
         
         // Timer rozmowy
-        startUserTimer(eventData.roundTime * 60, 'user-timer', function() {
+        startUserTimer(eventData.roundTime * 60, function() {
             const ratingBtn = document.getElementById('start-rating-btn');
             if (ratingBtn) {
                 ratingBtn.disabled = false;
                 ratingBtn.innerHTML = '<i class="fas fa-star"></i> Oceń rozmówcę TERAZ';
                 ratingBtn.style.background = 'linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%)';
-                ratingBtn.style.color = 'white';
                 
                 ratingBtn.addEventListener('click', function() {
                     showRatingScreen(partner);
@@ -411,23 +499,20 @@ function showUserTable() {
         });
     } else {
         userContent.innerHTML = `
-            <div class="waiting-screen">
-                <div class="waiting-icon">
+            <div style="text-align: center; padding: 40px;">
+                <div style="font-size: 60px; color: #FF9800; margin-bottom: 20px;">
                     <i class="fas fa-exclamation-triangle"></i>
                 </div>
-                <h3>Nie znaleziono stolika</h3>
-                <p>Nie znaleziono stolika dla Ciebie w tej rundzie.</p>
-                <p style="font-size: 14px; color: #666; margin-top: 20px;">
-                    Skontaktuj się z organizatorem.
-                </p>
+                <h3 style="color: #333;">Nie znaleziono stolika</h3>
+                <p style="color: #666;">Nie znaleziono stolika dla Ciebie w tej rundzie.</p>
             </div>
         `;
     }
 }
 
-function startUserTimer(seconds, elementId, onComplete = null) {
+function startUserTimer(seconds, onComplete = null) {
     let timeLeft = seconds;
-    const timerElement = document.getElementById(elementId);
+    const timerElement = document.getElementById('user-timer');
     
     if (!timerElement) return;
     
@@ -436,10 +521,8 @@ function startUserTimer(seconds, elementId, onComplete = null) {
         if (timerElement) {
             timerElement.textContent = formatTime(timeLeft);
             
-            // Zmiana koloru gdy mało czasu
             if (timeLeft < 60) {
                 timerElement.style.color = '#ff6b6b';
-                timerElement.style.animation = timeLeft < 30 ? 'pulse 1s infinite' : 'none';
             }
         }
         
@@ -456,160 +539,237 @@ function formatTime(seconds) {
     return `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
 }
 
-// ========== ALGORYTM DOBIERANIA PAR ==========
-function generateSmartPairings() {
-    const pairings = [];
-    const usedPairs = new Set();
+function handleLogout() {
+    localStorage.removeItem('userSessionId');
     
-    const activeParticipants = participants.filter(p => p.active !== false);
-    const totalRounds = eventData.totalRounds;
+    const url = new URL(window.location);
+    url.searchParams.delete('session');
+    window.history.replaceState({}, '', url);
     
-    for (let round = 1; round <= totalRounds; round++) {
-        const roundPairings = {
-            round: round,
-            pairs: [],
-            breakTable: []
-        };
-        
-        // Losowa kolejność w każdej rundzie
-        const availableParticipants = [...activeParticipants];
-        shuffleArray(availableParticipants);
-        const paired = new Set();
-        
-        // Krok 1: Dopasowanie według preferencji
-        for (let i = 0; i < availableParticipants.length; i++) {
-            if (paired.has(availableParticipants[i].id)) continue;
-            
-            let bestMatchIndex = null;
-            let bestMatchScore = -1;
-            
-            for (let j = i + 1; j < availableParticipants.length; j++) {
-                if (paired.has(availableParticipants[j].id)) continue;
-                
-                const pairKey = getPairKey(availableParticipants[i].id, availableParticipants[j].id);
-                if (usedPairs.has(pairKey)) continue;
-                
-                // Oblicz score dopasowania
-                const score = calculateMatchScore(
-                    availableParticipants[i],
-                    availableParticipants[j]
-                );
-                
-                if (score > bestMatchScore) {
-                    bestMatchScore = score;
-                    bestMatchIndex = j;
-                }
-            }
-            
-            if (bestMatchIndex !== null && bestMatchScore >= 0) {
-                const pairKey = getPairKey(
-                    availableParticipants[i].id,
-                    availableParticipants[bestMatchIndex].id
-                );
-                usedPairs.add(pairKey);
-                
-                roundPairings.pairs.push([
-                    availableParticipants[i],
-                    availableParticipants[bestMatchIndex]
-                ]);
-                paired.add(availableParticipants[i].id);
-                paired.add(availableParticipants[bestMatchIndex].id);
-            }
-        }
-        
-        // Krok 2: Dopasuj pozostałych
-        const remaining = availableParticipants.filter(p => !paired.has(p.id));
-        for (let i = 0; i < remaining.length; i += 2) {
-            if (i + 1 < remaining.length) {
-                const pairKey = getPairKey(remaining[i].id, remaining[i + 1].id);
-                
-                if (!usedPairs.has(pairKey)) {
-                    roundPairings.pairs.push([remaining[i], remaining[i + 1]]);
-                    usedPairs.add(pairKey);
-                } else {
-                    roundPairings.breakTable.push(remaining[i]);
-                }
-            } else {
-                roundPairings.breakTable.push(remaining[i]);
-            }
-        }
-        
-        pairings.push(roundPairings);
-    }
-    
-    eventData.pairings = pairings;
-    localStorage.setItem('speedDatingEvent', JSON.stringify(eventData));
-    return pairings;
-}
-
-function getPairKey(id1, id2) {
-    return `${Math.min(id1, id2)}-${Math.max(id1, id2)}`;
-}
-
-function calculateMatchScore(user1, user2) {
-    let score = 0;
-    
-    // Wzajemne zainteresowanie: +20 punktów
-    if (user1.interested.includes(user2.gender) && 
-        user2.interested.includes(user1.gender)) {
-        score += 20;
-    }
-    // Jednostronne zainteresowanie: +5 punktów
-    else if (user1.interested.includes(user2.gender) || 
-             user2.interested.includes(user1.gender)) {
-        score += 5;
-    }
-    // Brak zainteresowania: -10 punktów
-    else {
-        score -= 10;
-    }
-    
-    // Różne płeć: +2 punkty (zwiększa różnorodność)
-    if (user1.gender !== user2.gender) {
-        score += 2;
-    }
-    
-    return score;
-}
-
-function shuffleArray(array) {
-    for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-    }
-    return array;
+    currentUser = null;
+    location.href = location.pathname + '?participant';
 }
 
 // ========== PANEL ADMINISTRATORA ==========
 function showAdminPanel() {
     hideAllScreens();
     
-    // Upewnij się, że ekran admina istnieje
     const adminPanel = document.getElementById('admin-panel');
     if (!adminPanel) {
-        console.error('Element #admin-panel nie istnieje w DOM');
-        document.body.innerHTML = `
-            <div style="padding: 50px; text-align: center;">
-                <h1>Błąd ładowania panelu administratora</h1>
-                <p>Odśwież stronę lub sprawdź konsolę.</p>
-            </div>
-        `;
-        return;
+        // Jeśli nie ma panelu admina, utwórz go dynamicznie
+        createAdminPanel();
+    } else {
+        adminPanel.classList.add('active');
+        initializeAdminPanel();
     }
+}
+
+function createAdminPanel() {
+    // Jeśli brakuje panelu admina, dodaj go dynamicznie
+    const mainContainer = document.getElementById('app-container') || document.body;
     
-    adminPanel.classList.add('active');
+    mainContainer.innerHTML = `
+        <div id="admin-panel" class="screen active">
+            <div style="min-height: 100vh; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px;">
+                <div style="max-width: 1400px; margin: 0 auto;">
+                    <div style="background: white; border-radius: 15px; padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+                        <!-- Header -->
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #f0f0f0;">
+                            <div>
+                                <h1 style="margin: 0; color: #333;">
+                                    <i class="fas fa-crown" style="color: #FFD700;"></i> Panel Administratora
+                                </h1>
+                                <p style="color: #666; margin: 5px 0 0 0;">Zarządzanie wydarzeniem Speed Dating</p>
+                            </div>
+                            <div style="font-size: 14px; color: #666;">
+                                <div id="main-timer" style="font-size: 24px; font-weight: bold; color: #667eea;">05:00</div>
+                                <div>Runda: <span id="current-round-display">1</span>/<span id="total-rounds-display">3</span></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Stats Grid -->
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">
+                            <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 4px solid #667eea;">
+                                <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #666;">Uczestnicy</h3>
+                                <div style="font-size: 36px; font-weight: bold; color: #333;" id="participant-count">0</div>
+                                <p style="margin: 5px 0 0 0; font-size: 12px; color: #666;">z 50 miejsc</p>
+                            </div>
+                            <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 4px solid #4CAF50;">
+                                <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #666;">Aktywne pary</h3>
+                                <div style="font-size: 36px; font-weight: bold; color: #333;" id="pairs-count">0</div>
+                            </div>
+                            <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 4px solid #FF9800;">
+                                <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #666;">Na przerwie</h3>
+                                <div style="font-size: 36px; font-weight: bold; color: #333;" id="break-count">0</div>
+                            </div>
+                            <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 4px solid #E91E63;">
+                                <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #666;">Oceny TAK</h3>
+                                <div style="font-size: 36px; font-weight: bold; color: #333;" id="yes-count">0</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Two Columns Layout -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px;">
+                            <!-- Left Column: Participants List -->
+                            <div>
+                                <div style="background: white; border-radius: 10px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); height: 100%;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                                        <h2 style="margin: 0; color: #333; font-size: 18px;">
+                                            <i class="fas fa-users"></i> Lista uczestników
+                                        </h2>
+                                        <button onclick="updateAdminInterface()" class="btn" style="padding: 8px 16px; font-size: 12px;">
+                                            <i class="fas fa-redo"></i> Odśwież
+                                        </button>
+                                    </div>
+                                    <div id="participants-list" style="max-height: 400px; overflow-y: auto;">
+                                        <!-- Participants will be loaded here -->
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Right Column: Event Control -->
+                            <div>
+                                <div style="background: white; border-radius: 10px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); height: 100%;">
+                                    <h2 style="margin: 0 0 20px 0; color: #333; font-size: 18px;">
+                                        <i class="fas fa-cogs"></i> Sterowanie wydarzeniem
+                                    </h2>
+                                    
+                                    <!-- Time Settings -->
+                                    <div style="margin-bottom: 25px;">
+                                        <h3 style="margin: 0 0 15px 0; color: #666; font-size: 16px;">Ustawienia czasu</h3>
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                            <div>
+                                                <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">Czas rundy (min)</label>
+                                                <input type="number" id="round-time" value="5" min="1" max="30" 
+                                                       style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px;">
+                                            </div>
+                                            <div>
+                                                <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">Czas oceny (min)</label>
+                                                <input type="number" id="rating-time" value="2" min="1" max="10" 
+                                                       style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px;">
+                                            </div>
+                                            <div>
+                                                <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">Liczba rund</label>
+                                                <input type="number" id="total-rounds" value="3" min="1" max="10" 
+                                                       style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px;">
+                                            </div>
+                                            <div style="display: flex; align-items: flex-end;">
+                                                <button id="save-time" class="btn" style="width: 100%;">
+                                                    <i class="fas fa-save"></i> Zapisz czas
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Event Control Buttons -->
+                                    <div style="margin-bottom: 25px;">
+                                        <h3 style="margin: 0 0 15px 0; color: #666; font-size: 16px;">Sterowanie</h3>
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                                            <button id="start-event" class="btn" style="background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%);">
+                                                <i class="fas fa-play"></i> Rozpocznij
+                                            </button>
+                                            <button id="next-round" class="btn" style="background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);">
+                                                <i class="fas fa-forward"></i> Następna runda
+                                            </button>
+                                            <button id="end-event" class="btn" style="background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);">
+                                                <i class="fas fa-stop"></i> Zakończ
+                                            </button>
+                                            <button id="regenerate-pairs" class="btn" style="background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);">
+                                                <i class="fas fa-random"></i> Generuj pary
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Timer Control -->
+                                    <div style="margin-bottom: 25px;">
+                                        <h3 style="margin: 0 0 15px 0; color: #666; font-size: 16px;">Kontrola timera</h3>
+                                        <div style="display: flex; gap: 10px;">
+                                            <button id="pause-timer" class="btn" style="flex: 1;">
+                                                <i class="fas fa-pause"></i> Pauza
+                                            </button>
+                                            <button id="reset-timer" class="btn" style="flex: 1; background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%);">
+                                                <i class="fas fa-redo"></i> Resetuj
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Data Management -->
+                                    <div>
+                                        <h3 style="margin: 0 0 15px 0; color: #666; font-size: 16px;">Zarządzanie danymi</h3>
+                                        <div style="display: flex; gap: 10px;">
+                                            <button id="export-data" class="btn" style="flex: 1; background: linear-gradient(135deg, #009688 0%, #00796B 100%);">
+                                                <i class="fas fa-download"></i> Eksportuj
+                                            </button>
+                                            <button id="clear-all" class="btn" style="flex: 1; background: linear-gradient(135deg, #795548 0%, #5D4037 100%);">
+                                                <i class="fas fa-trash"></i> Wyczyść
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Tables Animation and URL -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+                            <!-- Tables Animation -->
+                            <div style="background: white; border-radius: 10px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                                <h2 style="margin: 0 0 20px 0; color: #333; font-size: 18px;">
+                                    <i class="fas fa-chair"></i> Stoliki - Runda <span id="anim-round">1</span>
+                                </h2>
+                                <div id="tables-animation" style="min-height: 200px;">
+                                    <!-- Tables will be loaded here -->
+                                </div>
+                            </div>
+                            
+                            <!-- Participant URL -->
+                            <div style="background: white; border-radius: 10px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                                <h2 style="margin: 0 0 20px 0; color: #333; font-size: 18px;">
+                                    <i class="fas fa-link"></i> Link dla uczestników
+                                </h2>
+                                <div id="participant-link">
+                                    <!-- URL will be loaded here -->
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Footer Info -->
+                        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #f0f0f0; text-align: center;">
+                            <p style="color: #666; font-size: 14px;">
+                                Speed Dating Pro v1.0 | Panel administratora
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
     
+    initializeAdminPanel();
+}
+
+function initializeAdminPanel() {
     // Załaduj ustawienia
-    document.getElementById('round-time').value = eventData.roundTime;
-    document.getElementById('rating-time').value = eventData.ratingTime;
-    document.getElementById('current-round-display').textContent = eventData.currentRound;
-    document.getElementById('anim-round').textContent = eventData.currentRound;
-    document.getElementById('total-rounds').value = eventData.totalRounds;
+    const roundTimeInput = document.getElementById('round-time');
+    const ratingTimeInput = document.getElementById('rating-time');
+    const totalRoundsInput = document.getElementById('total-rounds');
+    
+    if (roundTimeInput) roundTimeInput.value = eventData.roundTime || 5;
+    if (ratingTimeInput) ratingTimeInput.value = eventData.ratingTime || 2;
+    if (totalRoundsInput) totalRoundsInput.value = eventData.totalRounds || 3;
+    
+    // Aktualizuj wyświetlane rundy
+    const currentRoundDisplay = document.getElementById('current-round-display');
+    const animRoundDisplay = document.getElementById('anim-round');
+    const totalRoundsDisplay = document.getElementById('total-rounds-display');
+    
+    if (currentRoundDisplay) currentRoundDisplay.textContent = eventData.currentRound || 1;
+    if (animRoundDisplay) animRoundDisplay.textContent = eventData.currentRound || 1;
+    if (totalRoundsDisplay) totalRoundsDisplay.textContent = eventData.totalRounds || 3;
     
     // Aktualizuj URL dla uczestników
     updateParticipantURL();
     
-    // Aktualizuj interfejs
+    // Aktualizuj cały interfejs
     updateAdminInterface();
     
     // Dodaj event listeners
@@ -621,27 +781,26 @@ function updateParticipantURL() {
     const participantLink = document.getElementById('participant-link');
     if (participantLink) {
         participantLink.innerHTML = `
-            <div class="url-container" style="margin: 15px 0;">
-                <p style="margin-bottom: 8px; font-weight: bold;"><i class="fas fa-link"></i> Link dla uczestników:</p>
-                <div style="display: flex; gap: 10px;">
+            <div style="margin-bottom: 15px;">
+                <p style="color: #666; margin-bottom: 10px;">Wyślij ten link uczestnikom:</p>
+                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
                     <input type="text" value="${participantUrl}" readonly 
-                           style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-family: monospace;">
-                    <button onclick="copyToClipboard('${participantUrl}')" 
-                            class="btn" style="white-space: nowrap;">
-                        <i class="fas fa-copy"></i> Kopiuj
+                           style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 8px; background: #f8f9fa;">
+                    <button onclick="copyToClipboard('${participantUrl}')" class="btn" style="white-space: nowrap;">
+                        <i class="fas fa-copy"></i>
                     </button>
                 </div>
-                <p style="font-size: 12px; color: #666; margin-top: 8px;">
-                    <i class="fas fa-info-circle"></i> Wyślij ten link uczestnikom, aby się zarejestrowali
-                </p>
+                <div style="font-size: 12px; color: #666; background: #f8f9fa; padding: 10px; border-radius: 8px;">
+                    <i class="fas fa-info-circle"></i> Uczestnicy muszą wejść na ten link, aby się zarejestrować
+                </div>
             </div>
         `;
     }
 }
 
 function setupAdminEventListeners() {
-    // Podstawowe przyciski
-    const actions = {
+    // Mapowanie przycisków do funkcji
+    const buttonHandlers = {
         'save-time': saveTimeSettings,
         'start-event': startEvent,
         'next-round': nextRound,
@@ -649,53 +808,81 @@ function setupAdminEventListeners() {
         'pause-timer': toggleTimer,
         'reset-timer': resetTimer,
         'export-data': exportData,
-        'refresh-data': () => updateAdminInterface(),
-        'clear-all': clearAllData,
-        'regenerate-pairs': regeneratePairs
+        'regenerate-pairs': generateSmartPairings,
+        'clear-all': clearAllData
     };
     
-    for (const [id, handler] of Object.entries(actions)) {
+    // Przypisz event listeners
+    for (const [id, handler] of Object.entries(buttonHandlers)) {
         const element = document.getElementById(id);
         if (element) {
             element.addEventListener('click', handler);
         }
     }
-}
-
-function regeneratePairs() {
-    if (confirm('Wygenerować nowe pary dla bieżącej rundy?')) {
-        generateSmartPairings();
-        updateAdminInterface();
-        alert('Pary zostały ponownie wygenerowane!');
+    
+    // Dodaj globalny event listener dla odświeżania
+    const refreshBtn = document.querySelector('[onclick="updateAdminInterface()"]');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', updateAdminInterface);
     }
 }
 
 function updateAdminInterface() {
     // Pobierz świeże dane
-    participants = JSON.parse(localStorage.getItem('speedDatingParticipants')) || [];
-    const freshEventData = JSON.parse(localStorage.getItem('speedDatingEvent'));
-    if (freshEventData) {
-        eventData = freshEventData;
-    }
+    initializeData();
     
-    const activeParticipants = participants.filter(p => p.active !== false);
+    const activeParticipants = participants.filter(p => p && p.active !== false);
     
     // Aktualizuj liczniki
-    document.getElementById('participant-count').textContent = `${activeParticipants.length}/50`;
-    
-    // Aktualizuj listę uczestników
-    updateParticipantsList(activeParticipants);
+    updateCounter('participant-count', `${activeParticipants.length}/50`);
+    updateCounter('current-round-display', eventData.currentRound || 1);
+    updateCounter('anim-round', eventData.currentRound || 1);
+    updateCounter('total-rounds-display', eventData.totalRounds || 3);
     
     // Aktualizuj statystyki
     updateStatistics();
     
+    // Aktualizuj listę uczestników
+    updateParticipantsList(activeParticipants);
+    
     // Aktualizuj animację stolików
     updateTablesAnimation();
     
-    // Aktualizuj timer jeśli event aktywny
-    if (eventData.status === 'active') {
-        updateMainTimerDisplay();
+    // Aktualizuj timer
+    updateMainTimerDisplay();
+}
+
+function updateCounter(elementId, value) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.textContent = value;
     }
+}
+
+function updateStatistics() {
+    const activeParticipants = participants.filter(p => p && p.active !== false);
+    
+    // Oblicz statystyki
+    let pairsCount = 0;
+    let breakCount = 0;
+    let yesCount = 0;
+    
+    if (eventData.pairings && eventData.pairings.length > 0) {
+        const currentPairings = eventData.pairings[eventData.currentRound - 1];
+        if (currentPairings) {
+            pairsCount = currentPairings.pairs ? currentPairings.pairs.length : 0;
+            breakCount = currentPairings.breakTable ? currentPairings.breakTable.length : 0;
+        }
+    }
+    
+    if (eventData.ratings) {
+        yesCount = eventData.ratings.filter(r => r && r.rating === 'yes').length;
+    }
+    
+    // Aktualizuj wyświetlane wartości
+    updateCounter('pairs-count', pairsCount);
+    updateCounter('break-count', breakCount);
+    updateCounter('yes-count', yesCount);
 }
 
 function updateParticipantsList(activeParticipants) {
@@ -707,124 +894,67 @@ function updateParticipantsList(activeParticipants) {
             <div style="text-align: center; padding: 40px; color: #666;">
                 <i class="fas fa-users" style="font-size: 40px; margin-bottom: 15px;"></i>
                 <p>Brak uczestników</p>
-                <p style="font-size: 14px;">Uczestnicy pojawią się po rejestracji</p>
             </div>
         `;
         return;
     }
     
     participantsList.innerHTML = activeParticipants.map(p => `
-        <div class="participant-item" style="display: flex; justify-content: space-between; align-items: center; padding: 15px; margin-bottom: 10px; background: white; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
-            <div style="display: flex; align-items: center; gap: 15px; flex: 1;">
-                <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white;">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; margin-bottom: 8px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #${p.gender === 'male' ? '4CAF50' : 'E91E63'};">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-size: 14px;">
                     <i class="fas fa-user"></i>
                 </div>
-                <div style="flex: 1;">
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <strong>${p.username}</strong>
-                        <span style="font-size: 11px; padding: 2px 8px; background: ${p.gender === 'male' ? '#4CAF50' : '#E91E63'}; color: white; border-radius: 10px;">
-                            ${p.gender === 'male' ? 'Mężczyzna' : 'Kobieta'}
-                        </span>
+                <div>
+                    <div style="font-weight: bold; color: #333;">${p.username}</div>
+                    <div style="font-size: 12px; color: #666;">
+                        ${p.email} • ${p.gender === 'male' ? 'Mężczyzna' : 'Kobieta'}
                     </div>
-                    <p style="font-size: 12px; color: #666; margin: 5px 0;">
-                        ${p.email} • Dołączył: ${new Date(p.joinedAt).toLocaleDateString()}
-                    </p>
-                    <p style="font-size: 11px; color: #888;">
+                    <div style="font-size: 11px; color: #888; margin-top: 2px;">
                         <i class="fas fa-heart"></i> Szuka: ${Array.isArray(p.interested) ? p.interested.join(', ') : p.interested}
-                    </p>
+                    </div>
                 </div>
             </div>
-            <div style="text-align: right; min-width: 100px;">
-                <div class="participant-status ${getParticipantStatusClass(p.id)}" 
-                     style="padding: 5px 12px; border-radius: 15px; font-size: 12px; font-weight: bold; margin-bottom: 5px;">
+            <div style="text-align: right;">
+                <div style="font-size: 11px; padding: 4px 8px; background: #${getStatusColor(p.id)}; color: white; border-radius: 12px; margin-bottom: 4px;">
                     ${getParticipantStatus(p.id)}
                 </div>
                 <div style="font-size: 10px; color: #666;">
-                    ${isUserOnline(p.lastSeen) ? '🟢 Online' : '⚪ Offline'}
+                    ${isUserOnline(p.lastSeen) ? '🟢 Online' : '⚫ Ostatnio widziany'}
                 </div>
             </div>
         </div>
     `).join('');
 }
 
+function getStatusColor(userId) {
+    if (eventData.status !== 'active') return '666';
+    
+    if (eventData.pairings && eventData.pairings[eventData.currentRound - 1]) {
+        const roundPairings = eventData.pairings[eventData.currentRound - 1];
+        
+        if (roundPairings.pairs) {
+            for (const pair of roundPairings.pairs) {
+                if (pair && pair.find(p => p && p.id === userId)) return '4CAF50'; // Zielony - w parze
+            }
+        }
+        
+        if (roundPairings.breakTable && roundPairings.breakTable.find(p => p && p.id === userId)) {
+            return 'FF9800'; // Pomarańczowy - przerwa
+        }
+    }
+    
+    return '666'; // Szary - oczekuje
+}
+
 function isUserOnline(lastSeen) {
     if (!lastSeen) return false;
-    const lastSeenTime = new Date(lastSeen).getTime();
-    const now = Date.now();
-    return (now - lastSeenTime) < 5 * 60 * 1000; // 5 minut
-}
-
-function getParticipantStatusClass(userId) {
-    if (eventData.status !== 'active') return 'status-waiting';
-    
-    const roundPairings = eventData.pairings[eventData.currentRound - 1];
-    if (!roundPairings) return 'status-waiting';
-    
-    for (const pair of roundPairings.pairs) {
-        if (pair.find(p => p.id === userId)) return 'status-paired';
-    }
-    
-    if (roundPairings.breakTable?.find(p => p.id === userId)) return 'status-break';
-    
-    return 'status-waiting';
-}
-
-function getParticipantStatus(userId) {
-    if (eventData.status === 'waiting') return 'Oczekuje';
-    if (eventData.status === 'finished') return 'Zakończono';
-    
-    const roundPairings = eventData.pairings[eventData.currentRound - 1];
-    if (!roundPairings) return 'Oczekuje';
-    
-    for (const pair of roundPairings.pairs) {
-        if (pair.find(p => p.id === userId)) return 'W parze';
-    }
-    
-    if (roundPairings.breakTable?.find(p => p.id === userId)) return 'Przerwa';
-    
-    return 'Oczekuje';
-}
-
-function updateStatistics() {
-    const activeParticipants = participants.filter(p => p.active !== false);
-    const pairsCount = eventData.pairings.length > 0 ? 
-        eventData.pairings[eventData.currentRound - 1]?.pairs.length || 0 : 0;
-    const breakCount = eventData.pairings.length > 0 ?
-        eventData.pairings[eventData.currentRound - 1]?.breakTable?.length || 0 : 0;
-    
-    let yesCount = 0;
-    let matches = 0;
-    
-    if (eventData.ratings) {
-        yesCount = eventData.ratings.filter(r => r.rating === 'yes').length;
-        
-        // Znajdź wzajemne dopasowania
-        const mutualMatches = {};
-        eventData.ratings.forEach(rating => {
-            if (rating.rating === 'yes') {
-                const key = `${Math.min(rating.from, rating.to)}-${Math.max(rating.from, rating.to)}`;
-                if (!mutualMatches[key]) mutualMatches[key] = { count: 0 };
-                mutualMatches[key].count++;
-            }
-        });
-        
-        matches = Object.values(mutualMatches).filter(m => m.count === 2).length;
-    }
-    
-    // Aktualizuj wszystkie statystyki
-    const stats = {
-        'pairs-count': pairsCount,
-        'break-count': breakCount,
-        'yes-count': yesCount,
-        'matches-count': matches,
-        'total-participants': activeParticipants.length
-    };
-    
-    for (const [id, value] of Object.entries(stats)) {
-        const element = document.getElementById(id);
-        if (element) {
-            element.textContent = value;
-        }
+    try {
+        const lastSeenTime = new Date(lastSeen).getTime();
+        const now = Date.now();
+        return (now - lastSeenTime) < 300000; // 5 minut
+    } catch (error) {
+        return false;
     }
 }
 
@@ -832,131 +962,167 @@ function updateTablesAnimation() {
     const animationContainer = document.getElementById('tables-animation');
     if (!animationContainer) return;
     
-    animationContainer.innerHTML = '';
-    
-    if (eventData.status !== 'active' || !eventData.pairings[eventData.currentRound - 1]) {
+    if (eventData.status !== 'active' || !eventData.pairings || eventData.pairings.length === 0) {
         animationContainer.innerHTML = `
             <div style="text-align: center; padding: 40px; color: #666;">
                 <i class="fas fa-chair" style="font-size: 40px; margin-bottom: 15px;"></i>
                 <p>Brak aktywnych stolików</p>
-                <p style="font-size: 14px;">Stoliki pojawią się po rozpoczęciu wydarzenia</p>
             </div>
         `;
         return;
     }
     
-    const roundPairings = eventData.pairings[eventData.currentRound - 1];
+    const currentPairings = eventData.pairings[eventData.currentRound - 1];
+    if (!currentPairings) {
+        animationContainer.innerHTML = `<p style="color: #666; padding: 20px; text-align: center;">Brak danych dla tej rundy</p>`;
+        return;
+    }
+    
+    let tablesHTML = '';
     
     // Pokaż pary
-    roundPairings.pairs.forEach((pair, index) => {
-        const table = document.createElement('div');
-        table.className = 'table-item';
-        table.style.cssText = `
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 15px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            border-left: 5px solid #667eea;
-        `;
-        
-        table.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <div style="font-weight: bold; color: #667eea; font-size: 14px;">
-                    <i class="fas fa-chair"></i> Stolik ${index + 1}
-                </div>
-                <div style="font-size: 12px; color: #666;">
-                    Runda ${eventData.currentRound}
-                </div>
-            </div>
-            <div style="display: flex; justify-content: space-around; gap: 20px;">
-                ${pair.map(person => `
-                    <div style="text-align: center; flex: 1;">
-                        <div style="width: 50px; height: 50px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; margin: 0 auto 10px;">
-                            <i class="fas fa-user"></i>
+    if (currentPairings.pairs && currentPairings.pairs.length > 0) {
+        currentPairings.pairs.forEach((pair, index) => {
+            if (pair && pair.length === 2) {
+                tablesHTML += `
+                    <div style="background: white; border-radius: 10px; padding: 15px; margin-bottom: 15px; border: 2px solid #e0e0e0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <div style="font-weight: bold; color: #667eea; font-size: 14px;">
+                                <i class="fas fa-chair"></i> Stolik ${index + 1}
+                            </div>
+                            <div style="font-size: 12px; color: #666;">2 osoby</div>
                         </div>
-                        <strong style="display: block;">${person.username}</strong>
-                        <div style="font-size: 11px; color: #666;">
-                            ${person.gender === 'male' ? '♂ Mężczyzna' : '♀ Kobieta'}
+                        <div style="display: flex; justify-content: space-around; gap: 20px;">
+                            ${pair.map(person => `
+                                <div style="text-align: center; flex: 1;">
+                                    <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; margin: 0 auto 8px;">
+                                        <i class="fas fa-user"></i>
+                                    </div>
+                                    <div style="font-weight: bold; font-size: 14px;">${person.username}</div>
+                                    <div style="font-size: 12px; color: #666;">${person.gender}</div>
+                                </div>
+                            `).join('')}
                         </div>
                     </div>
-                `).join('')}
-            </div>
-        `;
-        animationContainer.appendChild(table);
-    });
+                `;
+            }
+        });
+    }
     
     // Pokaż stolik przerw
-    if (roundPairings.breakTable?.length > 0) {
-        const breakTable = document.createElement('div');
-        breakTable.className = 'table-item break';
-        breakTable.style.cssText = `
-            background: #FFF3E0;
-            border-radius: 12px;
-            padding: 20px;
-            margin-top: 20px;
-            border-left: 5px solid #FF9800;
-        `;
-        
-        breakTable.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <div style="font-weight: bold; color: #FF9800; font-size: 14px;">
-                    <i class="fas fa-coffee"></i> Stolik przerwy
-                </div>
-                <div style="font-size: 12px; color: #666;">
-                    ${roundPairings.breakTable.length} osoba(y)
-                </div>
-            </div>
-            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
-                ${roundPairings.breakTable.map(person => `
-                    <div style="display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: white; border-radius: 20px; border: 1px solid #FFE0B2;">
-                        <div style="width: 30px; height: 30px; border-radius: 50%; background: #FF9800; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px;">
-                            <i class="fas fa-user"></i>
-                        </div>
-                        <div>
-                            <div style="font-weight: bold; font-size: 12px;">${person.username}</div>
-                        </div>
+    if (currentPairings.breakTable && currentPairings.breakTable.length > 0) {
+        tablesHTML += `
+            <div style="background: #FFF3E0; border-radius: 10px; padding: 15px; border: 2px solid #FFE0B2;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <div style="font-weight: bold; color: #FF9800; font-size: 14px;">
+                        <i class="fas fa-coffee"></i> Przerwa
                     </div>
-                `).join('')}
+                    <div style="font-size: 12px; color: #666;">${currentPairings.breakTable.length} osoby</div>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                    ${currentPairings.breakTable.map(person => `
+                        <div style="padding: 6px 12px; background: white; border-radius: 15px; font-size: 12px; border: 1px solid #FFE0B2;">
+                            <i class="fas fa-user" style="margin-right: 5px; color: #FF9800;"></i>
+                            ${person.username}
+                        </div>
+                    `).join('')}
+                </div>
             </div>
         `;
-        animationContainer.appendChild(breakTable);
     }
+    
+    animationContainer.innerHTML = tablesHTML || `<p style="color: #666; padding: 20px; text-align: center;">Brak stolików w tej rundzie</p>`;
 }
 
 // ========== FUNKCJE ADMINISTRATORA ==========
 function saveTimeSettings() {
-    eventData.roundTime = parseInt(document.getElementById('round-time').value);
-    eventData.ratingTime = parseInt(document.getElementById('rating-time').value);
-    eventData.totalRounds = parseInt(document.getElementById('total-rounds').value);
-    localStorage.setItem('speedDatingEvent', JSON.stringify(eventData));
-    
-    showNotification('Ustawienia czasu zapisane!', 'success');
+    try {
+        eventData.roundTime = parseInt(document.getElementById('round-time').value) || 5;
+        eventData.ratingTime = parseInt(document.getElementById('rating-time').value) || 2;
+        eventData.totalRounds = parseInt(document.getElementById('total-rounds').value) || 3;
+        
+        localStorage.setItem('speedDatingEvent', JSON.stringify(eventData));
+        showNotification('Ustawienia czasu zapisane!', 'success');
+    } catch (error) {
+        console.error('Błąd zapisywania ustawień:', error);
+        showNotification('Błąd zapisywania ustawień!', 'error');
+    }
 }
 
 function startEvent() {
-    const activeParticipants = participants.filter(p => p.active !== false);
+    const activeParticipants = participants.filter(p => p && p.active !== false);
+    
     if (activeParticipants.length < 2) {
         showNotification('Potrzeba co najmniej 2 uczestników!', 'error');
         return;
     }
     
-    if (activeParticipants.length % 2 !== 0) {
-        if (!confirm('Nieparzysta liczba uczestników. Jedna osoba będzie miała przerwę w każdej rundzie. Kontynuować?')) {
-            return;
-        }
+    if (confirm(`Rozpocząć wydarzenie z ${activeParticipants.length} uczestnikami?`)) {
+        generateSmartPairings();
+        
+        eventData.status = 'active';
+        eventData.currentRound = 1;
+        localStorage.setItem('speedDatingEvent', JSON.stringify(eventData));
+        
+        startMainTimer();
+        updateAdminInterface();
+        
+        showNotification(`Wydarzenie rozpoczęte! ${activeParticipants.length} uczestników.`, 'success');
     }
-    
-    generateSmartPairings();
-    
-    eventData.status = 'active';
-    eventData.currentRound = 1;
-    localStorage.setItem('speedDatingEvent', JSON.stringify(eventData));
-    
-    startMainTimer();
-    updateAdminInterface();
-    
-    showNotification(`Wydarzenie rozpoczęte! ${activeParticipants.length} uczestników, ${eventData.totalRounds} rund.`, 'success');
+}
+
+function generateSmartPairings() {
+    try {
+        const activeParticipants = participants.filter(p => p && p.active !== false);
+        const pairings = [];
+        const usedPairs = new Set();
+        
+        for (let round = 1; round <= eventData.totalRounds; round++) {
+            const roundPairings = {
+                round: round,
+                pairs: [],
+                breakTable: []
+            };
+            
+            // Losowa kolejność
+            const shuffled = [...activeParticipants].sort(() => Math.random() - 0.5);
+            const pairedIds = new Set();
+            
+            // Proste dopasowanie
+            for (let i = 0; i < shuffled.length; i++) {
+                if (pairedIds.has(shuffled[i].id)) continue;
+                
+                // Znajdź niezaparowaną osobę
+                for (let j = i + 1; j < shuffled.length; j++) {
+                    if (pairedIds.has(shuffled[j].id)) continue;
+                    
+                    // Utwórz parę
+                    roundPairings.pairs.push([shuffled[i], shuffled[j]]);
+                    pairedIds.add(shuffled[i].id);
+                    pairedIds.add(shuffled[j].id);
+                    break;
+                }
+            }
+            
+            // Osoby bez pary idą na przerwę
+            shuffled.forEach(p => {
+                if (!pairedIds.has(p.id)) {
+                    roundPairings.breakTable.push(p);
+                }
+            });
+            
+            pairings.push(roundPairings);
+        }
+        
+        eventData.pairings = pairings;
+        localStorage.setItem('speedDatingEvent', JSON.stringify(eventData));
+        
+        return pairings;
+    } catch (error) {
+        console.error('Błąd generowania par:', error);
+        showNotification('Błąd generowania par!', 'error');
+        return [];
+    }
 }
 
 function nextRound() {
@@ -969,16 +1135,13 @@ function nextRound() {
     localStorage.setItem('speedDatingEvent', JSON.stringify(eventData));
     
     resetTimer();
-    
-    document.getElementById('current-round-display').textContent = eventData.currentRound;
-    document.getElementById('anim-round').textContent = eventData.currentRound;
     updateAdminInterface();
     
     showNotification(`Rozpoczynasz rundę ${eventData.currentRound}`, 'info');
 }
 
 function endEvent() {
-    if (confirm('Czy na pewno chcesz zakończyć wydarzenie?')) {
+    if (confirm('Czy na pewno zakończyć wydarzenie?')) {
         eventData.status = 'finished';
         localStorage.setItem('speedDatingEvent', JSON.stringify(eventData));
         
@@ -995,7 +1158,7 @@ function endEvent() {
 function startMainTimer() {
     if (timerInterval) clearInterval(timerInterval);
     
-    timeLeft = eventData.roundTime * 60;
+    timeLeft = (eventData.roundTime || 5) * 60;
     updateMainTimerDisplay();
     
     timerInterval = setInterval(() => {
@@ -1017,7 +1180,8 @@ function updateMainTimerDisplay() {
         
         if (timeLeft < 60) {
             timerElement.style.color = '#ff6b6b';
-            timerElement.style.fontWeight = 'bold';
+        } else {
+            timerElement.style.color = '#667eea';
         }
     }
 }
@@ -1028,11 +1192,11 @@ function toggleTimer() {
     if (timerInterval) {
         clearInterval(timerInterval);
         timerInterval = null;
-        pauseBtn.innerHTML = '<i class="fas fa-play"></i> Wznów';
+        if (pauseBtn) pauseBtn.innerHTML = '<i class="fas fa-play"></i> Wznów';
         showNotification('Timer wstrzymany', 'info');
     } else {
         startMainTimer();
-        pauseBtn.innerHTML = '<i class="fas fa-pause"></i> Pauza';
+        if (pauseBtn) pauseBtn.innerHTML = '<i class="fas fa-pause"></i> Pauza';
         showNotification('Timer wznowiony', 'success');
     }
 }
@@ -1053,39 +1217,36 @@ function resetTimer() {
 }
 
 function exportData() {
-    const exportData = {
-        event: eventData,
-        participants: participants,
-        timestamp: new Date().toISOString(),
-        summary: {
-            totalParticipants: participants.length,
-            activeParticipants: participants.filter(p => p.active !== false).length,
-            totalRounds: eventData.totalRounds,
-            completedRounds: eventData.currentRound - 1,
-            totalRatings: eventData.ratings ? eventData.ratings.length : 0,
-            yesRatings: eventData.ratings ? eventData.ratings.filter(r => r.rating === 'yes').length : 0
-        }
-    };
-    
-    const dataStr = JSON.stringify(exportData, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    
-    const exportFileDefaultName = `speed-dating-export-${new Date().toISOString().slice(0,10)}.json`;
-    
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
-    document.body.appendChild(linkElement);
-    linkElement.click();
-    document.body.removeChild(linkElement);
-    
-    showNotification('Dane wyeksportowane do pliku JSON!', 'success');
+    try {
+        const exportData = {
+            event: eventData,
+            participants: participants,
+            timestamp: new Date().toISOString()
+        };
+        
+        const dataStr = JSON.stringify(exportData, null, 2);
+        const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+        
+        const link = document.createElement('a');
+        link.setAttribute('href', dataUri);
+        link.setAttribute('download', `speed-dating-${new Date().toISOString().slice(0,10)}.json`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        showNotification('Dane wyeksportowane!', 'success');
+    } catch (error) {
+        console.error('Błąd eksportu:', error);
+        showNotification('Błąd eksportu danych!', 'error');
+    }
 }
 
 function clearAllData() {
-    if (confirm('CZY NA PEWNO? To usunie WSZYSTKICH uczestników i dane wydarzenia! Ta operacja jest nieodwracalna.')) {
+    if (confirm('CZY NA PEWNO? To usunie WSZYSTKIE dane!')) {
         localStorage.removeItem('speedDatingParticipants');
         localStorage.removeItem('speedDatingEvent');
+        localStorage.removeItem('userSessionId');
+        
         participants = [];
         eventData = {
             status: 'waiting',
@@ -1096,22 +1257,23 @@ function clearAllData() {
             pairings: [],
             ratings: []
         };
+        
         updateAdminInterface();
-        showNotification('Wszystkie dane zostały usunięte!', 'warning');
+        showNotification('Wszystkie dane usunięte!', 'warning');
     }
 }
 
 function copyToClipboard(text) {
     navigator.clipboard.writeText(text).then(() => {
-        showNotification('Link skopiowany do schowka!', 'success');
+        showNotification('Skopiowano do schowka!', 'success');
     }).catch(err => {
         console.error('Błąd kopiowania:', err);
-        showNotification('Błąd kopiowania', 'error');
+        showNotification('Błąd kopiowania!', 'error');
     });
 }
 
 function showNotification(message, type = 'info') {
-    // Utwórz element powiadomienia
+    // Utwórz powiadomienie
     const notification = document.createElement('div');
     notification.style.cssText = `
         position: fixed;
@@ -1123,9 +1285,8 @@ function showNotification(message, type = 'info') {
         border-radius: 8px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         z-index: 10000;
-        animation: slideIn 0.3s ease;
+        animation: slideInRight 0.3s ease;
         font-weight: bold;
-        max-width: 400px;
     `;
     
     notification.innerHTML = `
@@ -1139,72 +1300,13 @@ function showNotification(message, type = 'info') {
     
     // Usuń po 3 sekundach
     setTimeout(() => {
-        notification.style.animation = 'slideOut 0.3s ease';
+        notification.style.animation = 'slideOutRight 0.3s ease';
         setTimeout(() => {
             if (notification.parentNode) {
                 notification.parentNode.removeChild(notification);
             }
         }, 300);
     }, 3000);
-}
-
-// ========== OCENIANIE ==========
-function showRatingScreen(partner) {
-    hideAllScreens();
-    const ratingScreen = document.getElementById('rating-screen');
-    if (ratingScreen) {
-        ratingScreen.classList.add('active');
-        document.getElementById('rate-person').textContent = partner.username;
-        
-        let selectedRating = null;
-        
-        document.querySelectorAll('.rate-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                document.querySelectorAll('.rate-btn').forEach(b => b.classList.remove('selected'));
-                this.classList.add('selected');
-                selectedRating = this.dataset.rating;
-            });
-        });
-        
-        document.getElementById('submit-rating').addEventListener('click', function() {
-            if (!selectedRating) {
-                alert('Wybierz ocenę (TAK lub NIE)!');
-                return;
-            }
-            
-            // Zapisz ocenę
-            if (!currentUser.ratings) currentUser.ratings = {};
-            currentUser.ratings[partner.id] = {
-                rating: selectedRating,
-                note: document.getElementById('rating-note').value,
-                round: eventData.currentRound,
-                timestamp: new Date().toISOString()
-            };
-            
-            // Zapisz zmiany
-            localStorage.setItem('currentUser', JSON.stringify(currentUser));
-            
-            // Zaktualizuj główną listę
-            const userIndex = participants.findIndex(p => p.id === currentUser.id);
-            if (userIndex !== -1) {
-                participants[userIndex] = currentUser;
-                localStorage.setItem('speedDatingParticipants', JSON.stringify(participants));
-            }
-            
-            // Zapisz w danych wydarzenia
-            if (!eventData.ratings) eventData.ratings = [];
-            eventData.ratings.push({
-                from: currentUser.id,
-                to: partner.id,
-                rating: selectedRating,
-                round: eventData.currentRound
-            });
-            localStorage.setItem('speedDatingEvent', JSON.stringify(eventData));
-            
-            alert('Dziękujemy za ocenę!');
-            showUserPanel();
-        });
-    }
 }
 
 // ========== FUNKCJE POMOCNICZE ==========
@@ -1214,62 +1316,44 @@ function hideAllScreens() {
     });
 }
 
-// ========== INICJALIZACJA ==========
-function initializeApp() {
-    // Dodaj style CSS
-    addCustomStyles();
-    
-    // Poczekaj na załadowanie DOM
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', detectRole);
-    } else {
-        // DOM już załadowany
-        detectRole();
-    }
+function showErrorScreen(message) {
+    document.body.innerHTML = `
+        <div style="min-height: 100vh; display: flex; justify-content: center; align-items: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px;">
+            <div style="background: white; border-radius: 15px; padding: 40px; max-width: 500px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+                <div style="font-size: 60px; color: #f44336; margin-bottom: 20px;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <h2 style="color: #333; margin-bottom: 15px;">Błąd aplikacji</h2>
+                <p style="color: #666; margin-bottom: 25px;">${message}</p>
+                <button onclick="location.reload()" class="btn" style="padding: 12px 30px;">
+                    <i class="fas fa-redo"></i> Odśwież stronę
+                </button>
+            </div>
+        </div>
+    `;
 }
 
-function addCustomStyles() {
+function addGlobalStyles() {
     const style = document.createElement('style');
     style.textContent = `
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
         
-        @keyframes slideOut {
-            from { transform: translateX(0); opacity: 1; }
-            to { transform: translateX(100%); opacity: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
         }
         
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
+        .screen {
+            display: none;
         }
         
-        .status-waiting {
-            background: #f0f0f0;
-            color: #666;
-            border: 1px solid #ddd;
-        }
-        
-        .status-paired {
-            background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%);
-            color: white;
-        }
-        
-        .status-break {
-            background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
-            color: white;
-        }
-        
-        .table-timer {
-            font-size: 48px;
-            font-weight: bold;
-            color: #667eea;
-            text-align: center;
-            font-family: monospace;
-            margin: 20px 0;
+        .screen.active {
+            display: block;
         }
         
         .btn {
@@ -1302,72 +1386,49 @@ function addCustomStyles() {
             box-shadow: none;
         }
         
-        .screen {
-            display: none;
-            min-height: 100vh;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #333;
-        }
-        
-        .screen.active {
-            display: block;
-        }
-        
-        #admin-panel {
-            padding: 20px;
-            background: #f5f7fa;
-        }
-        
-        .admin-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 15px;
-            padding: 30px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-        }
-        
-        .admin-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #f0f0f0;
-        }
-        
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        
-        .stat-card {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-            border-left: 4px solid #667eea;
-        }
-        
-        .stat-card h3 {
-            margin: 0 0 10px 0;
+        input, select, textarea {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
             font-size: 14px;
-            color: #666;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            font-family: inherit;
         }
         
-        .stat-number {
-            font-size: 36px;
-            font-weight: bold;
-            color: #333;
-            margin: 0;
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes slideOutRight {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
         }
     `;
     document.head.appendChild(style);
 }
 
-// ========== URUCHOM APLIKACJĘ ==========
-initializeApp();
+// ========== URUCHOMIENIE APLIKACJI ==========
+// Rozpocznij aplikację
+initApp();
+
+// Dodaj globalne funkcje
+window.copyToClipboard = copyToClipboard;
+window.updateAdminInterface = updateAdminInterface;
