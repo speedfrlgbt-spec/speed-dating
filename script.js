@@ -1,554 +1,401 @@
 // ============================================
-// SPEED DATING PRO - JEDNA APLIKACJA, DWIE ROLE
+// SPEED DATING PRO - JEDNA APLIKACJA
 // ============================================
 
 // ========== KONFIGURACJA ==========
 let participants = JSON.parse(localStorage.getItem('speedDatingParticipants')) || [];
-let matches = JSON.parse(localStorage.getItem('speedDatingMatches')) || [];
-let allPairings = JSON.parse(localStorage.getItem('speedDatingPairings')) || [];
-let currentRound = 1;
-let totalRounds = 0;
-let currentUser = null;
-let eventSettings = JSON.parse(localStorage.getItem('speedDatingSettings')) || {
-    roundDuration: 5,
-    breakDuration: 2,
-    ratingTime: 3,
-    enableBreakTable: true,
-    allowTriples: false,
-    autoRotate: false,
-    enableRatings: true,
-    eventStatus: 'pending',
-    matchesShared: false
+let eventData = JSON.parse(localStorage.getItem('speedDatingEvent')) || {
+    status: 'waiting', // waiting, active, finished
+    currentRound: 1,
+    totalRounds: 3,
+    roundTime: 5, // minuty
+    ratingTime: 2, // minuty
+    pairings: [],
+    ratings: []
 };
 
-// ========== ROZPOZNANIE ROLI - NAJWAŻNIEJSZA FUNKCJA ==========
-function detectUserRoleAndShowView() {
+let currentUser = null;
+let timerInterval = null;
+let timeLeft = 0;
+
+// ========== ROZPOZNANIE ROLI ==========
+function detectRole() {
     const urlParams = new URLSearchParams(window.location.search);
-    const savedUser = localStorage.getItem('currentUser');
     
-    // 1. SPRAWDŹ CZY TO ZALOGOWANY UCZESTNIK
+    // 1. Czy to admin? (bez parametru i bez zalogowanego użytkownika)
+    if (!urlParams.has('participant') && !localStorage.getItem('currentUser')) {
+        showAdminPanel();
+        return;
+    }
+    
+    // 2. Czy to zalogowany użytkownik?
+    const savedUser = localStorage.getItem('currentUser');
     if (savedUser) {
         currentUser = JSON.parse(savedUser);
-        const exists = participants.find(p => p.id === currentUser.id);
-        if (!exists) {
+        const userExists = participants.find(p => p.id === currentUser.id);
+        if (userExists) {
+            showUserPanel();
+            return;
+        } else {
             localStorage.removeItem('currentUser');
             currentUser = null;
-        } else {
-            // UCZESTNIK JEST ZALOGOWANY - pokaż JEGO panel
-            showParticipantDashboard();
+        }
+    }
+    
+    // 3. To nowy użytkownik (?participant w URL)
+    showRegistrationScreen();
+}
+
+// ========== REJESTRACJA UCZESTNIKA ==========
+function showRegistrationScreen() {
+    hideAllScreens();
+    document.getElementById('login-screen').classList.add('active');
+    
+    // Obsługa wyboru płci
+    document.querySelectorAll('.option-btn:not(.multi)').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.option-btn:not(.multi)').forEach(b => b.classList.remove('selected'));
+            this.classList.add('selected');
+            document.getElementById('reg-gender').value = this.dataset.value;
+        });
+    });
+    
+    // Obsługa wyboru zainteresowań (wielokrotny)
+    document.querySelectorAll('.option-btn.multi').forEach(btn => {
+        btn.addEventListener('click', function() {
+            this.classList.toggle('selected');
+            updateInterests();
+        });
+    });
+    
+    // Obsługa formularza
+    document.getElementById('register-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const username = document.getElementById('reg-username').value.trim();
+        const email = document.getElementById('reg-email').value.trim();
+        const gender = document.getElementById('reg-gender').value;
+        const interests = document.getElementById('reg-interests').value;
+        
+        if (!username || !email || !gender || !interests) {
+            alert('Proszę wypełnić wszystkie pola!');
+            return;
+        }
+        
+        // Stwórz nowego uczestnika
+        const newUser = {
+            id: Date.now(),
+            username: username,
+            email: email,
+            gender: gender,
+            interested: JSON.parse(interests),
+            joinedAt: new Date().toISOString(),
+            ratings: {},
+            tableHistory: []
+        };
+        
+        // Dodaj do listy uczestników
+        participants.push(newUser);
+        localStorage.setItem('speedDatingParticipants', JSON.stringify(participants));
+        
+        // Zaloguj użytkownika
+        currentUser = newUser;
+        localStorage.setItem('currentUser', JSON.stringify(currentUser));
+        
+        // Przejdź do panelu użytkownika
+        showUserPanel();
+    });
+}
+
+function updateInterests() {
+    const selected = Array.from(document.querySelectorAll('.option-btn.multi.selected'))
+        .map(btn => btn.dataset.value);
+    document.getElementById('reg-interests').value = JSON.stringify(selected);
+}
+
+// ========== PANEL UŻYTKOWNIKA ==========
+function showUserPanel() {
+    hideAllScreens();
+    document.getElementById('user-panel').classList.add('active');
+    document.getElementById('user-name').textContent = currentUser.username;
+    
+    const userContent = document.getElementById('user-content');
+    userContent.innerHTML = '';
+    
+    if (eventData.status === 'waiting') {
+        // Wydarzenie jeszcze się nie zaczęło
+        userContent.innerHTML = `
+            <div class="waiting-screen">
+                <div class="waiting-icon">
+                    <i class="fas fa-clock"></i>
+                </div>
+                <h3>Czekamy na rozpoczęcie</h3>
+                <p>Wydarzenie jeszcze się nie rozpoczęło. Organizator poinformuje Cię, 
+                kiedy będziesz mógł dołączyć do rozmów.</p>
+                <div class="user-info">
+                    <p><strong>Twoje dane:</strong></p>
+                    <p>Login: ${currentUser.username}</p>
+                    <p>Płeć: ${currentUser.gender}</p>
+                    <p>Zainteresowania: ${currentUser.interested.join(', ')}</p>
+                </div>
+            </div>
+        `;
+    } else if (eventData.status === 'active') {
+        // Wydarzenie trwa - pokaż stolik użytkownika
+        showUserTable();
+    } else {
+        // Wydarzenie zakończone
+        userContent.innerHTML = `
+            <div class="waiting-screen">
+                <div class="waiting-icon">
+                    <i class="fas fa-flag-checkered"></i>
+                </div>
+                <h3>Wydarzenie zakończone</h3>
+                <p>Dziękujemy za udział! Organizator prześle Ci wyniki dopasowań.</p>
+            </div>
+        `;
+    }
+    
+    // Obsługa wylogowania
+    document.getElementById('user-logout').addEventListener('click', function() {
+        localStorage.removeItem('currentUser');
+        currentUser = null;
+        location.href = location.pathname + '?participant';
+    });
+}
+
+function showUserTable() {
+    const userContent = document.getElementById('user-content');
+    const roundPairings = eventData.pairings[eventData.currentRound - 1];
+    
+    if (!roundPairings) {
+        userContent.innerHTML = `<div class="waiting-screen"><p>Trwa losowanie par...</p></div>`;
+        return;
+    }
+    
+    // Znajdź stolik użytkownika
+    let userTable = null;
+    let partner = null;
+    
+    // Szukaj w parach
+    for (const pair of roundPairings.pairs) {
+        const userInPair = pair.find(p => p.id === currentUser.id);
+        if (userInPair) {
+            partner = pair.find(p => p.id !== currentUser.id);
+            userTable = pair;
+            break;
+        }
+    }
+    
+    // Jeśli nie w parach, sprawdź przerwę
+    if (!userTable && roundPairings.breakTable) {
+        const inBreak = roundPairings.breakTable.find(p => p.id === currentUser.id);
+        if (inBreak) {
+            userContent.innerHTML = `
+                <div class="table-screen">
+                    <h3><i class="fas fa-coffee"></i> Przerwa - Runda ${eventData.currentRound}</h3>
+                    <p>W tej rundzie masz przerwę. Możesz odpocząć lub porozmawiać z innymi osobami.</p>
+                    <div class="table-timer" id="user-timer">${formatTime(eventData.roundTime * 60)}</div>
+                    <p>Następna runda za:</p>
+                </div>
+            `;
+            startUserTimer(eventData.roundTime * 60, 'user-timer');
             return;
         }
     }
     
-    // 2. SPRAWDŹ CZY TO NOWY UCZESTNIK (?participant w URL)
-    if (urlParams.has('participant')) {
-        showRegistrationScreen(); // POKAŻ TYLKO FORMULARZ REJESTRACJI
-        return;
-    }
-    
-    // 3. TO JEST ADMINISTRATOR - pokaż pełną aplikację
-    showAdminApplication();
-}
-
-// ========== WIDOKI DLA UCZESTNIKÓW ==========
-function showRegistrationScreen() {
-    // UKRYJ WSZYSTKO, POKAŻ TYLKO FORMULARZ
-    hideAllScreens();
-    document.getElementById('login-screen').classList.add('active');
-    
-    // UKRYJ elementy admina
-    document.querySelector('.qr-section').style.display = 'none';
-    document.querySelector('.participants-card').style.display = 'none';
-    
-    // Zmień nagłówek
-    document.querySelector('.logo h1').textContent = 'Rejestracja - Speed Dating';
-    document.querySelector('.subtitle').textContent = 'Dołącz do wydarzenia!';
-    
-    // Ukryj przyciski admina w formularzu
-    const adminButtons = document.querySelector('.admin-buttons');
-    if (adminButtons) adminButtons.style.display = 'none';
-}
-
-function showParticipantDashboard() {
-    hideAllScreens();
-    
-    if (eventSettings.eventStatus === 'pending') {
-        // Wydarzenie jeszcze się nie zaczęło
-        showWaitingScreen();
-    } else if (eventSettings.eventStatus === 'active') {
-        // Wydarzenie trwa - pokaż stolik uczestnika
-        showMyTable();
-    } else {
-        // Wydarzenie zakończone
-        showParticipantResults();
-    }
-}
-
-function showWaitingScreen() {
-    // Ekran oczekiwania dla uczestnika
-    const screen = createParticipantScreen('waiting');
-    
-    screen.innerHTML = `
-        <div class="logo">
-            <i class="fas fa-clock" style="color:#6a11cb; font-size:48px;"></i>
-            <h1>Witaj ${currentUser.username}!</h1>
-            <p class="subtitle">Czekamy na rozpoczęcie wydarzenia</p>
-        </div>
-        
-        <div class="participant-card">
-            <h3><i class="fas fa-info-circle"></i> Twoje dane rejestracyjne</h3>
-            <div class="user-data">
-                <p><strong>Login:</strong> ${currentUser.username}</p>
-                <p><strong>Email:</strong> ${currentUser.email}</p>
-                <p><strong>Płeć:</strong> ${currentUser.gender}</p>
-                <p><strong>Zainteresowania:</strong> ${currentUser.interested.join(', ')}</p>
-            </div>
-            <p class="info-text">Organizator poinformuje Cię, kiedy wydarzenie się rozpocznie. 
-            Wtedy zobaczysz swój stolik i będziesz mógł oceniać rozmowy.</p>
-            
-            <button id="participant-logout" class="participant-btn">
-                <i class="fas fa-sign-out-alt"></i> Wyloguj się
-            </button>
-        </div>
-    `;
-    
-    document.getElementById('participant-logout').addEventListener('click', logoutParticipant);
-}
-
-function showMyTable() {
-    // Znajdź stolik uczestnika w aktualnej rundzie
-    const roundData = allPairings[currentRound - 1];
-    if (!roundData) {
-        showWaitingScreen();
-        return;
-    }
-    
-    let myTableInfo = null;
-    
-    // Szukaj w parach
-    roundData.pairs.forEach((pair, tableIndex) => {
-        const userIndex = pair.findIndex(p => p.id === currentUser.id);
-        if (userIndex !== -1) {
-            myTableInfo = {
-                type: 'pair',
-                tableNumber: tableIndex + 1,
-                partner: pair[userIndex === 0 ? 1 : 0],
-                mySeat: userIndex + 1
-            };
-        }
-    });
-    
-    // Jeśli nie w parach, sprawdź stolik przerw
-    if (!myTableInfo && roundData.breakTable) {
-        const breakIndex = roundData.breakTable.findIndex(p => p.id === currentUser.id);
-        if (breakIndex !== -1) {
-            myTableInfo = {
-                type: 'break',
-                tableNumber: 0,
-                partner: null,
-                breakPeople: roundData.breakTable
-            };
-        }
-    }
-    
-    const screen = createParticipantScreen('table');
-    
-    if (myTableInfo && myTableInfo.type === 'pair') {
-        // POKAŻ STOLIK Z ROZMÓWCĄ
-        screen.innerHTML = `
-            <div class="logo">
-                <i class="fas fa-chair" style="color:#4CAF50; font-size:48px;"></i>
-                <h1>Runda ${currentRound}</h1>
-                <p class="subtitle">Czas na rozmowę!</p>
-            </div>
-            
-            <div class="table-container">
-                <div class="table-header">
-                    <h3><i class="fas fa-table"></i> Stolik ${myTableInfo.tableNumber}</h3>
-                    <p class="timer">Czas: <span id="conversation-timer">${eventSettings.roundDuration}:00</span></p>
-                </div>
+    if (userTable && partner) {
+        userContent.innerHTML = `
+            <div class="table-screen">
+                <h3><i class="fas fa-chair"></i> Stolik - Runda ${eventData.currentRound}</h3>
                 
-                <div class="seats-container">
-                    <div class="seat your-seat">
-                        <div class="seat-label">Ty (Miejsce ${myTableInfo.mySeat})</div>
-                        <div class="seat-content">
-                            <i class="fas fa-user"></i>
-                            <h4>${currentUser.username}</h4>
-                            <small>${currentUser.gender}</small>
-                        </div>
+                <div class="table-display">
+                    <div class="seat you">
+                        <i class="fas fa-user"></i>
+                        <h4>TY</h4>
+                        <p>${currentUser.username}</p>
+                        <div class="seat-number">Miejsce 1</div>
                     </div>
                     
-                    <div class="vs-circle">
+                    <div style="font-size: 40px; color: #667eea;">
                         <i class="fas fa-heart"></i>
                     </div>
                     
-                    <div class="seat partner-seat">
-                        <div class="seat-label">Rozmówca (Miejsce ${myTableInfo.mySeat === 1 ? 2 : 1})</div>
-                        <div class="seat-content">
-                            <i class="fas fa-user"></i>
-                            <h4>${myTableInfo.partner.username}</h4>
-                            <small>${myTableInfo.partner.gender}</small>
-                        </div>
+                    <div class="seat partner">
+                        <i class="fas fa-user"></i>
+                        <h4>ROZMÓWCA</h4>
+                        <p>${partner.username}</p>
+                        <p><small>${partner.gender}</small></p>
+                        <div class="seat-number">Miejsce 2</div>
                     </div>
                 </div>
                 
-                <div class="table-instructions">
-                    <p><i class="fas fa-clock"></i> Masz ${eventSettings.roundDuration} minut na rozmowę.</p>
-                    <p><i class="fas fa-star"></i> Po sygnale ocenisz tę osobę.</p>
-                </div>
+                <div class="table-timer" id="user-timer">${formatTime(eventData.roundTime * 60)}</div>
+                <p>Pozostały czas rozmowy</p>
                 
-                <div class="action-buttons">
-                    <button id="rate-now-btn" class="participant-btn primary-btn" disabled>
-                        <i class="fas fa-hourglass-half"></i> Oceń rozmówcę (dostępne po czasie)
-                    </button>
-                    <button id="view-instructions" class="participant-btn secondary-btn">
-                        <i class="fas fa-question-circle"></i> Instrukcja
-                    </button>
-                </div>
+                <button id="start-rating-btn" class="btn" disabled style="margin-top: 30px;">
+                    <i class="fas fa-hourglass-half"></i> Oceń po zakończeniu czasu
+                </button>
             </div>
-            
-            <button id="table-logout" class="logout-btn">
-                <i class="fas fa-sign-out-alt"></i> Wyloguj się
-            </button>
         `;
         
         // Timer rozmowy
-        let timeLeft = eventSettings.roundDuration * 60;
-        const timerElement = document.getElementById('conversation-timer');
-        const rateButton = document.getElementById('rate-now-btn');
-        
-        const timerInterval = setInterval(() => {
-            const minutes = Math.floor(timeLeft / 60);
-            const seconds = timeLeft % 60;
-            timerElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        startUserTimer(eventData.roundTime * 60, 'user-timer', function() {
+            const ratingBtn = document.getElementById('start-rating-btn');
+            ratingBtn.disabled = false;
+            ratingBtn.innerHTML = '<i class="fas fa-star"></i> Oceń rozmówcę TERAZ';
+            ratingBtn.style.background = 'linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%)';
             
-            if (timeLeft <= 0) {
-                clearInterval(timerInterval);
-                rateButton.disabled = false;
-                rateButton.innerHTML = '<i class="fas fa-star"></i> Oceń rozmówcę TERAZ!';
-                rateButton.classList.add('active-btn');
-            }
-            timeLeft--;
-        }, 1000);
-        
-        // Event listener do oceny
-        rateButton.addEventListener('click', () => {
-            showRatingScreen(myTableInfo.partner);
+            ratingBtn.addEventListener('click', function() {
+                showRatingScreen(partner);
+            });
         });
-        
-    } else if (myTableInfo && myTableInfo.type === 'break') {
-        // POKAŻ STOLIK PRZERWY
-        screen.innerHTML = `
-            <div class="logo">
-                <i class="fas fa-coffee" style="color:#ff9800; font-size:48px;"></i>
-                <h1>Runda ${currentRound}</h1>
-                <p class="subtitle">Masz przerwę w tej rundzie</p>
-            </div>
-            
-            <div class="break-container">
-                <h3><i class="fas fa-coffee"></i> Stolik przerw</h3>
-                <p>W tej rundzie nie masz przypisanego rozmówcy. Możesz odpocząć lub porozmawiać z innymi osobami na przerwie:</p>
-                
-                <div class="break-people">
-                    ${myTableInfo.breakPeople.map(p => `
-                        <div class="break-person ${p.id === currentUser.id ? 'you' : ''}">
-                            <i class="fas fa-user"></i>
-                            <div>
-                                <strong>${p.username}</strong>
-                                <small>${p.gender}</small>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-                
-                <p class="next-round-info">Następna runda za: <span id="break-timer">05:00</span></p>
-            </div>
-            
-            <button id="break-logout" class="logout-btn">
-                <i class="fas fa-sign-out-alt"></i> Wyloguj się
-            </button>
-        `;
     } else {
-        // NIE ZNALEZIONO STOLIKA
-        screen.innerHTML = `
-            <div class="logo">
-                <i class="fas fa-exclamation-triangle" style="color:#ff9800; font-size:48px;"></i>
-                <h1>Nie znaleziono stolika</h1>
-                <p class="subtitle">Skontaktuj się z organizatorem</p>
-            </div>
-            
-            <div class="error-container">
-                <p>Nie masz przypisanego stolika w tej rundzie. Możliwe przyczyny:</p>
-                <ul>
-                    <li>Wydarzenie jeszcze się nie rozpoczęło</li>
-                    <li>Administrator nie wygenerował jeszcze par</li>
-                    <li>Wystąpił błąd w przypisaniu</li>
-                </ul>
-                <button id="refresh-assignment" class="participant-btn">
-                    <i class="fas fa-sync-alt"></i> Sprawdź ponownie
-                </button>
-            </div>
-        `;
-        
-        document.getElementById('refresh-assignment').addEventListener('click', showParticipantDashboard);
-    }
-    
-    // Dodaj listener do wylogowania
-    const logoutBtn = document.querySelector('.logout-btn');
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', logoutParticipant);
+        userContent.innerHTML = `<div class="waiting-screen"><p>Nie znaleziono stolika dla Ciebie w tej rundzie.</p></div>`;
     }
 }
 
-function showRatingScreen(partner) {
-    const screen = createParticipantScreen('rating');
+function startUserTimer(seconds, elementId, onComplete = null) {
+    let timeLeft = seconds;
+    const timerElement = document.getElementById(elementId);
     
-    screen.innerHTML = `
-        <div class="logo">
-            <i class="fas fa-star" style="color:#FFD700; font-size:48px;"></i>
-            <h1>Oceń rozmowę</h1>
-            <p class="subtitle">Jak oceniasz rozmowę z ${partner.username}?</p>
-        </div>
+    const interval = setInterval(() => {
+        timeLeft--;
+        if (timerElement) {
+            timerElement.textContent = formatTime(timeLeft);
+        }
         
-        <div class="rating-container">
-            <div class="person-to-rate">
-                <div class="person-avatar">
-                    <i class="fas fa-user"></i>
-                </div>
-                <div class="person-details">
-                    <h3>${partner.username}</h3>
-                    <p class="person-gender">${partner.gender}</p>
-                </div>
-            </div>
-            
-            <div class="rating-options">
-                <button class="rating-option yes-option" data-rating="yes">
-                    <div class="rating-icon">
-                        <i class="fas fa-check-circle"></i>
-                    </div>
-                    <div class="rating-text">
-                        <h4>TAK</h4>
-                        <p>Chcę kontynuować kontakt</p>
-                    </div>
-                </button>
-                
-                <button class="rating-option no-option" data-rating="no">
-                    <div class="rating-icon">
-                        <i class="fas fa-times-circle"></i>
-                    </div>
-                    <div class="rating-text">
-                        <h4>NIE</h4>
-                        <p>Dziękuję, nie tym razem</p>
-                    </div>
-                </button>
-            </div>
-            
-            <div class="notes-section">
-                <label for="rating-notes">
-                    <i class="fas fa-sticky-note"></i> Twoje notatki (tylko dla Ciebie):
-                </label>
-                <textarea id="rating-notes" placeholder="Zapisz swoje wrażenia z rozmowy..."></textarea>
-            </div>
-            
-            <div class="rating-actions">
-                <button id="submit-rating" class="participant-btn primary-btn">
-                    <i class="fas fa-paper-plane"></i> Zapisz ocenę
-                </button>
-                <button id="skip-rating" class="participant-btn secondary-btn">
-                    <i class="fas fa-forward"></i> Pomiń ocenę
-                </button>
-            </div>
-        </div>
-    `;
+        if (timeLeft <= 0) {
+            clearInterval(interval);
+            if (onComplete) onComplete();
+        }
+    }, 1000);
+}
+
+function formatTime(seconds) {
+    const min = Math.floor(seconds / 60);
+    const sec = seconds % 60;
+    return `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+}
+
+// ========== OCENIANIE ==========
+function showRatingScreen(partner) {
+    hideAllScreens();
+    document.getElementById('rating-screen').classList.add('active');
+    document.getElementById('rate-person').textContent = partner.username;
     
-    // Event listeners dla ocen
     let selectedRating = null;
-    document.querySelectorAll('.rating-option').forEach(option => {
-        option.addEventListener('click', function() {
-            document.querySelectorAll('.rating-option').forEach(opt => opt.classList.remove('selected'));
+    
+    document.querySelectorAll('.rate-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.rate-btn').forEach(b => b.classList.remove('selected'));
             this.classList.add('selected');
             selectedRating = this.dataset.rating;
         });
     });
     
-    // Zapisz ocenę
-    document.getElementById('submit-rating').addEventListener('click', () => {
+    document.getElementById('submit-rating').addEventListener('click', function() {
         if (!selectedRating) {
-            alert('Wybierz ocenę (TAK lub NIE) przed zapisaniem!');
+            alert('Wybierz ocenę (TAK lub NIE)!');
             return;
         }
-        
-        const notes = document.getElementById('rating-notes').value || "Brak notatki";
         
         // Zapisz ocenę
         if (!currentUser.ratings) currentUser.ratings = {};
         currentUser.ratings[partner.id] = {
-            value: selectedRating,
-            notes: notes,
-            round: currentRound,
+            rating: selectedRating,
+            note: document.getElementById('rating-note').value,
+            round: eventData.currentRound,
             timestamp: new Date().toISOString()
         };
-        
-        // Aktualizuj statystyki
-        if (selectedRating === 'yes') {
-            currentUser.given.yes = (currentUser.given.yes || 0) + 1;
-        } else {
-            currentUser.given.no = (currentUser.given.no || 0) + 1;
-        }
         
         // Zapisz zmiany
         localStorage.setItem('currentUser', JSON.stringify(currentUser));
         
-        // Znajdź i zaktualizuj w głównej liście
+        // Znajdź użytkownika w głównej liście i zaktualizuj
         const userIndex = participants.findIndex(p => p.id === currentUser.id);
         if (userIndex !== -1) {
-            participants[userIndex] = { ...currentUser };
+            participants[userIndex] = currentUser;
             localStorage.setItem('speedDatingParticipants', JSON.stringify(participants));
         }
         
-        alert(`Dziękujemy za ocenę! ${selectedRating === 'yes' ? 'Super, że się podobało!' : 'Następna rozmowa będzie lepsza!'}`);
-        showParticipantDashboard();
-    });
-    
-    // Pomiń ocenę
-    document.getElementById('skip-rating').addEventListener('click', () => {
-        showParticipantDashboard();
-    });
-}
-
-function showParticipantResults() {
-    const screen = createParticipantScreen('results');
-    
-    // Oblicz statystyki
-    const givenYes = currentUser.given?.yes || 0;
-    const givenNo = currentUser.given?.no || 0;
-    const receivedYes = currentUser.received?.yes || 0;
-    const totalConversations = givenYes + givenNo;
-    
-    screen.innerHTML = `
-        <div class="logo">
-            <i class="fas fa-trophy" style="color:#FFD700; font-size:48px;"></i>
-            <h1>Twoje wyniki</h1>
-            <p class="subtitle">Wydarzenie zakończone!</p>
-        </div>
-        
-        <div class="results-container">
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <i class="fas fa-handshake"></i>
-                    <h3>${totalConversations}</h3>
-                    <p>Rozegrane rozmowy</p>
-                </div>
-                <div class="stat-card">
-                    <i class="fas fa-thumbs-up"></i>
-                    <h3>${givenYes}</h3>
-                    <p>Twoje "TAK"</p>
-                </div>
-                <div class="stat-card">
-                    <i class="fas fa-user-check"></i>
-                    <h3>${receivedYes}</h3>
-                    <p>Otrzymane "TAK"</p>
-                </div>
-            </div>
-            
-            <div class="matches-section">
-                <h3><i class="fas fa-heart"></i> Twoje dopasowania</h3>
-                <div class="matches-list">
-                    <p class="no-matches">Dopasowania zostaną udostępnione po zatwierdzeniu przez organizatora.</p>
-                </div>
-            </div>
-            
-            <button id="results-logout" class="participant-btn primary-btn">
-                <i class="fas fa-sign-out-alt"></i> Zakończ i wyloguj się
-            </button>
-        </div>
-    `;
-    
-    document.getElementById('results-logout').addEventListener('click', logoutParticipant);
-}
-
-// ========== FUNKCJE POMOCNICZE DLA UCZESTNIKÓW ==========
-function createParticipantScreen(type) {
-    hideAllScreens();
-    
-    // Utwórz nowy ekran dla uczestnika
-    const screen = document.createElement('div');
-    screen.className = `screen active participant-screen participant-${type}`;
-    screen.id = `participant-${type}-screen`;
-    
-    document.querySelector('.container').appendChild(screen);
-    return screen;
-}
-
-function hideAllScreens() {
-    // Ukryj wszystkie ekrany
-    document.querySelectorAll('.screen').forEach(screen => {
-        screen.classList.remove('active');
-    });
-    
-    // Usuń ekrany uczestnika jeśli istnieją
-    document.querySelectorAll('.participant-screen').forEach(screen => {
-        screen.remove();
-    });
-}
-
-function logoutParticipant() {
-    localStorage.removeItem('currentUser');
-    currentUser = null;
-    // Przekieruj z powrotem do rejestracji
-    window.location.href = window.location.pathname + '?participant';
-}
-
-// ========== PANEL ADMINISTRATORA ==========
-function showAdminApplication() {
-    // Pokaż normalną aplikację z panelem admina
-    hideAllScreens();
-    document.getElementById('login-screen').classList.add('active');
-    
-    // Przywróć elementy admina
-    document.querySelector('.qr-section').style.display = 'block';
-    document.querySelector('.participants-card').style.display = 'block';
-    
-    // Przywróć oryginalny nagłówek
-    document.querySelector('.logo h1').textContent = 'Speed Dating Online Pro';
-    document.querySelector('.subtitle').textContent = 'System dopasowań z ocenianiem';
-    
-    // Pokaż przyciski admina
-    const adminButtons = document.querySelector('.admin-buttons');
-    if (adminButtons) adminButtons.style.display = 'flex';
-    
-    // Inicjalizuj pozostałe funkcje admina
-    generateQRCode();
-    updateParticipantsList();
-    loadSettings();
-    updateEventInfo();
-    setupEventListeners();
-}
-
-// ========== INICJALIZACJA ==========
-function initializeApp() {
-    detectUserRoleAndShowView();
-}
-
-// ========== POZOSTAŁE FUNKCJE (muszą być w script.js) ==========
-function generateQRCode() {
-    const participantUrl = window.location.origin + window.location.pathname + '?participant';
-    const qrElement = document.getElementById('qr-code');
-    if (qrElement) {
-        qrElement.innerHTML = '';
-        QRCode.toCanvas(qrElement, participantUrl, { width: 200 }, function(error) {
-            if (error) console.error(error);
+        // Zapisz ocenę w danych wydarzenia
+        if (!eventData.ratings) eventData.ratings = [];
+        eventData.ratings.push({
+            from: currentUser.id,
+            to: partner.id,
+            rating: selectedRating,
+            round: eventData.currentRound
         });
+        localStorage.setItem('speedDatingEvent', JSON.stringify(eventData));
+        
+        alert('Dziękujemy za ocenę!');
+        showUserPanel();
+    });
+}
+
+// ========== ALGORYTM DOBIERANIA PAR ==========
+function generateSmartPairings() {
+    const pairings = [];
+    const usedPairs = new Set();
+    
+    for (let round = 1; round <= eventData.totalRounds; round++) {
+        const roundPairings = {
+            round: round,
+            pairs: [],
+            breakTable: []
+        };
+        
+        const availableParticipants = [...participants];
+        shuffleArray(availableParticipants);
+        const paired = new Set();
+        
+        // Krok 1: Znajdź IDEALNE pary (wzajemne zainteresowanie)
+        for (let i = 0; i < availableParticipants.length; i++) {
+            if (paired.has(availableParticipants[i].id)) continue;
+            
+            let bestMatch = null;
+            
+            for (let j = i + 1; j < availableParticipants.length; j++) {
+                if (paired.has(availableParticipants[j].id)) continue;
+                
+                const pairKey = `${Math.min(availableParticipants[i].id, availableParticipants[j].id)}-${Math.max(availableParticipants[i].id, availableParticipants[j].id)}`;
+                if (usedPairs.has(pairKey)) continue;
+                
+                // Sprawdź wzajemne zainteresowanie
+                const mutualInterest = 
+                    availableParticipants[i].interested.includes(availableParticipants[j].gender) &&
+                    availableParticipants[j].interested.includes(availableParticipants[i].gender);
+                
+                if (mutualInterest) {
+                    bestMatch = j;
+                    usedPairs.add(pairKey);
+                    break;
+                }
+            }
+            
+            if (bestMatch !== null) {
+                roundPairings.pairs.push([
+                    availableParticipants[i],
+                    availableParticipants[bestMatch]
+                ]);
+                paired.add(availableParticipants[i].id);
+                paired.add(availableParticipants[bestMatch].id);
+            }
+        }
+        
+        // Krok 2: Pozostałe osoby idą na przerwę
+        const unpaired = availableParticipants.filter(p => !paired.has(p.id));
+        if (unpaired.length > 0) {
+            roundPairings.breakTable = [...unpaired];
+        }
+        
+        pairings.push(roundPairings);
     }
-}
-
-function checkMutualInterest(person1, person2) {
-    return person1.interested.includes(person2.gender) &&
-           person2.interested.includes(person1.gender);
-}
-
-function getPairKey(id1, id2) {
-    return `${Math.min(id1, id2)}-${Math.max(id1, id2)}`;
+    
+    eventData.pairings = pairings;
+    localStorage.setItem('speedDatingEvent', JSON.stringify(eventData));
+    return pairings;
 }
 
 function shuffleArray(array) {
@@ -559,123 +406,292 @@ function shuffleArray(array) {
     return array;
 }
 
-function calculateOptimalRounds(participantsList) {
-    const n = participantsList.length;
-    if (n <= 4) return 3;
-    if (n <= 8) return 4;
-    if (n <= 12) return 5;
-    if (n <= 16) return 6;
-    return Math.min(7, Math.floor(n/2));
+// ========== PANEL ADMINISTRATORA ==========
+function showAdminPanel() {
+    hideAllScreens();
+    document.getElementById('admin-panel').classList.add('active');
+    
+    // Załaduj ustawienia czasu
+    document.getElementById('round-time').value = eventData.roundTime;
+    document.getElementById('rating-time').value = eventData.ratingTime;
+    document.getElementById('current-round-display').textContent = eventData.currentRound;
+    document.getElementById('anim-round').textContent = eventData.currentRound;
+    
+    // Aktualizuj interfejs
+    updateAdminInterface();
+    
+    // Event listeners dla admina
+    document.getElementById('save-time').addEventListener('click', saveTimeSettings);
+    document.getElementById('start-event').addEventListener('click', startEvent);
+    document.getElementById('next-round').addEventListener('click', nextRound);
+    document.getElementById('end-event').addEventListener('click', endEvent);
+    document.getElementById('pause-timer').addEventListener('click', toggleTimer);
+    document.getElementById('reset-timer').addEventListener('click', resetTimer);
+    document.getElementById('export-data').addEventListener('click', exportData);
 }
 
-// ========== URUCHOMIENIE ==========
-document.addEventListener('DOMContentLoaded', initializeApp);
-
-// ========== TE FUNKCJE MUSZĄ BYĆ W script.js ==========
-// (Dodaj je z poprzedniego kodu jeśli nie ma)
-function updateParticipantsList() {
-    const container = document.getElementById('participants-container');
-    const countElement = document.getElementById('participant-count');
+function updateAdminInterface() {
+    // Aktualizuj liczbę uczestników
+    document.getElementById('participant-count').textContent = participants.length;
     
-    if (!container || !countElement) return;
-    
-    // Statystyki płci
-    const femaleCount = participants.filter(p => p.gender === 'Kobieta').length;
-    const maleCount = participants.filter(p => p.gender === 'Mężczyzna').length;
-    const nonbinaryCount = participants.filter(p => p.gender === 'Nonbinary').length;
-    
-    document.getElementById('female-count').textContent = femaleCount;
-    document.getElementById('male-count').textContent = maleCount;
-    document.getElementById('nonbinary-count').textContent = nonbinaryCount;
-    
-    countElement.textContent = participants.length;
-    
-    if (participants.length === 0) {
-        container.innerHTML = '<p class="no-participants">Brak uczestników</p>';
-        return;
-    }
-    
-    container.innerHTML = participants.map(p => `
+    // Aktualizuj listę uczestników
+    const participantsList = document.getElementById('participants-list');
+    participantsList.innerHTML = participants.map(p => `
         <div class="participant-item">
-            <div>
-                <strong>${p.username}</strong>
-                <span class="participant-gender gender-${getGenderClass(p.gender)}">
-                    ${p.gender}
-                </span>
-                <br>
-                <small><i class="fas fa-envelope"></i> ${p.email}</small>
+            <div class="participant-info">
+                <div class="participant-avatar">
+                    <i class="fas fa-user"></i>
+                </div>
+                <div>
+                    <strong>${p.username}</strong>
+                    <p style="font-size: 12px; color: #666;">${p.email} • ${p.gender}</p>
+                </div>
             </div>
-            <div class="participant-stats">
-                <small>TAK: ${p.given?.yes || 0}</small>
+            <div class="participant-status status-waiting">
+                ${getParticipantStatus(p.id)}
             </div>
         </div>
     `).join('');
+    
+    // Aktualizuj statystyki
+    updateStatistics();
+    
+    // Aktualizuj animację stolików
+    updateTablesAnimation();
 }
 
-function getGenderClass(gender) {
-    if (gender === 'Kobieta') return 'female';
-    if (gender === 'Mężczyzna') return 'male';
-    if (gender === 'Nonbinary') return 'nonbinary';
-    return '';
+function getParticipantStatus(userId) {
+    if (eventData.status !== 'active') return 'Oczekuje';
+    
+    const roundPairings = eventData.pairings[eventData.currentRound - 1];
+    if (!roundPairings) return 'Oczekuje';
+    
+    // Sprawdź czy w parach
+    for (const pair of roundPairings.pairs) {
+        if (pair.find(p => p.id === userId)) return 'W parze';
+    }
+    
+    // Sprawdź czy na przerwie
+    if (roundPairings.breakTable?.find(p => p.id === userId)) return 'Przerwa';
+    
+    return 'Oczekuje';
 }
 
-function loadSettings() {
-    // Implementuj ładowanie ustawień
+function updateStatistics() {
+    const pairsCount = eventData.pairings.length > 0 ? 
+        eventData.pairings[eventData.currentRound - 1]?.pairs.length || 0 : 0;
+    const breakCount = eventData.pairings.length > 0 ?
+        eventData.pairings[eventData.currentRound - 1]?.breakTable?.length || 0 : 0;
+    
+    // Policz oceny TAK
+    let yesCount = 0;
+    if (eventData.ratings) {
+        yesCount = eventData.ratings.filter(r => r.rating === 'yes').length;
+    }
+    
+    document.getElementById('pairs-count').textContent = pairsCount;
+    document.getElementById('break-count').textContent = breakCount;
+    document.getElementById('yes-count').textContent = yesCount;
 }
 
-function updateEventInfo() {
-    // Implementuj aktualizację informacji
-}
-
-function setupEventListeners() {
-    // Implementuj event listeners z poprzedniego kodu
-    const form = document.getElementById('participant-form');
-    if (form) {
-        form.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const username = document.getElementById('username').value.trim();
-            const email = document.getElementById('email').value.trim();
-            const gender = document.querySelector('input[name="gender"]:checked');
-            const interestedCheckboxes = document.querySelectorAll('input[name="interested"]:checked');
-            const privacyConsent = document.getElementById('privacy-consent').checked;
-            
-            if (!username || !email || !gender || interestedCheckboxes.length === 0) {
-                alert('Proszę wypełnić wszystkie pola!');
-                return;
-            }
-            
-            if (!privacyConsent) {
-                alert('Musisz wyrazić zgodę na przetwarzanie danych!');
-                return;
-            }
-            
-            const interested = Array.from(interestedCheckboxes).map(cb => cb.value);
-            const newParticipant = {
-                id: Date.now(),
-                username: username,
-                email: email,
-                gender: gender.value,
-                interested: interested,
-                joinedAt: new Date().toISOString(),
-                ratings: {},
-                notes: {},
-                received: { yes: 0, no: 0 },
-                given: { yes: 0, no: 0 }
-            };
-            
-            participants.push(newParticipant);
-            localStorage.setItem('speedDatingParticipants', JSON.stringify(participants));
-            
-            // Zapisz jako aktualnego użytkownika
-            currentUser = newParticipant;
-            localStorage.setItem('currentUser', JSON.stringify(currentUser));
-            
-            alert(`Witaj ${username}! Rejestracja zakończona sukcesem.`);
-            form.reset();
-            
-            // Po rejestracji pokaż ekran oczekiwania
-            showParticipantDashboard();
-        });
+function updateTablesAnimation() {
+    const animationContainer = document.getElementById('tables-animation');
+    animationContainer.innerHTML = '';
+    
+    if (eventData.status !== 'active' || !eventData.pairings[eventData.currentRound - 1]) {
+        animationContainer.innerHTML = '<p style="color: #666; padding: 50px; text-align: center;">Brak aktywnych stolików</p>';
+        return;
+    }
+    
+    const roundPairings = eventData.pairings[eventData.currentRound - 1];
+    
+    // Pokaż pary
+    roundPairings.pairs.forEach((pair, index) => {
+        const table = document.createElement('div');
+        table.className = 'table-item';
+        table.innerHTML = `
+            <div class="table-number">Stolik ${index + 1}</div>
+            ${pair.map(person => `
+                <div class="table-seat">
+                    <strong>${person.username}</strong>
+                    <div style="font-size: 12px;">${person.gender}</div>
+                </div>
+            `).join('')}
+        `;
+        animationContainer.appendChild(table);
+    });
+    
+    // Pokaż stolik przerw (jeśli jest)
+    if (roundPairings.breakTable?.length > 0) {
+        const breakTable = document.createElement('div');
+        breakTable.className = 'table-item break';
+        breakTable.innerHTML = `
+            <div class="table-number"><i class="fas fa-coffee"></i> Przerwa</div>
+            ${roundPairings.breakTable.map(person => `
+                <div class="table-seat">
+                    ${person.username}
+                </div>
+            `).join('')}
+        `;
+        animationContainer.appendChild(breakTable);
     }
 }
+
+// ========== FUNKCJE ADMINISTRATORA ==========
+function saveTimeSettings() {
+    eventData.roundTime = parseInt(document.getElementById('round-time').value);
+    eventData.ratingTime = parseInt(document.getElementById('rating-time').value);
+    localStorage.setItem('speedDatingEvent', JSON.stringify(eventData));
+    alert('Ustawienia czasu zapisane!');
+}
+
+function startEvent() {
+    if (participants.length < 2) {
+        alert('Potrzeba co najmniej 2 uczestników!');
+        return;
+    }
+    
+    // Wygeneruj pary
+    generateSmartPairings();
+    
+    // Ustaw status wydarzenia
+    eventData.status = 'active';
+    eventData.currentRound = 1;
+    localStorage.setItem('speedDatingEvent', JSON.stringify(eventData));
+    
+    // Uruchom timer
+    startMainTimer();
+    
+    // Aktualizuj interfejs
+    updateAdminInterface();
+    
+    alert(`Wydarzenie rozpoczęte! Wygenerowano ${eventData.pairings.length} rund.`);
+}
+
+function nextRound() {
+    if (eventData.currentRound >= eventData.totalRounds) {
+        alert('To już ostatnia runda!');
+        return;
+    }
+    
+    eventData.currentRound++;
+    localStorage.setItem('speedDatingEvent', JSON.stringify(eventData));
+    
+    // Zresetuj timer
+    resetTimer();
+    
+    // Aktualizuj interfejs
+    document.getElementById('current-round-display').textContent = eventData.currentRound;
+    document.getElementById('anim-round').textContent = eventData.currentRound;
+    updateAdminInterface();
+    
+    alert(`Rozpoczynasz rundę ${eventData.currentRound}`);
+}
+
+function endEvent() {
+    eventData.status = 'finished';
+    localStorage.setItem('speedDatingEvent', JSON.stringify(eventData));
+    
+    // Zatrzymaj timer
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
+    
+    updateAdminInterface();
+    alert('Wydarzenie zakończone!');
+}
+
+function startMainTimer() {
+    if (timerInterval) clearInterval(timerInterval);
+    
+    timeLeft = eventData.roundTime * 60;
+    updateMainTimerDisplay();
+    
+    timerInterval = setInterval(() => {
+        timeLeft--;
+        updateMainTimerDisplay();
+        
+        if (timeLeft <= 0) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            alert('Czas rundy minął!');
+        }
+    }, 1000);
+}
+
+function updateMainTimerDisplay() {
+    document.getElementById('main-timer').textContent = formatTime(timeLeft);
+}
+
+function toggleTimer() {
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+        document.getElementById('pause-timer').innerHTML = '<i class="fas fa-play"></i> Wznów';
+    } else {
+        startMainTimer();
+        document.getElementById('pause-timer').innerHTML = '<i class="fas fa-pause"></i> Pauza';
+    }
+}
+
+function resetTimer() {
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
+    startMainTimer();
+    document.getElementById('pause-timer').innerHTML = '<i class="fas fa-pause"></i> Pauza';
+}
+
+function exportData() {
+    // Przygotuj dane do eksportu
+    const exportData = {
+        event: eventData,
+        participants: participants,
+        timestamp: new Date().toISOString()
+    };
+    
+    // Utwórz i pobierz plik JSON
+    const dataStr = JSON.stringify(exportData, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    
+    const exportFileDefaultName = `speed-dating-data-${new Date().toISOString().slice(0,10)}.json`;
+    
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+    
+    alert('Dane wyeksportowane!');
+}
+
+// ========== FUNKCJE POMOCNICZE ==========
+function hideAllScreens() {
+    document.querySelectorAll('.screen').forEach(screen => {
+        screen.classList.remove('active');
+    });
+}
+
+// ========== URUCHOMIENIE APLIKACJI ==========
+document.addEventListener('DOMContentLoaded', function() {
+    detectRole();
+    
+    // Dodaj URL dla uczestników na ekranie admina
+    const participantUrl = window.location.origin + window.location.pathname + '?participant';
+    const startScreen = document.getElementById('start-screen');
+    if (startScreen) {
+        document.getElementById('role-text').innerHTML = `
+            <div style="margin: 40px 0;">
+                <p>Adres dla uczestników:</p>
+                <div style="background: white; padding: 15px; border-radius: 10px; margin: 15px 0;">
+                    <code>${participantUrl}</code>
+                </div>
+                <button onclick="navigator.clipboard.writeText('${participantUrl}').then(() => alert('Skopiowano!'))" 
+                        class="btn" style="margin-top: 10px;">
+                    <i class="fas fa-copy"></i> Kopiuj link
+                </button>
+            </div>
+        `;
+    }
+});
