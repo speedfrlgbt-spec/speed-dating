@@ -1,5 +1,5 @@
 // ============================================
-// SPEED DATING PRO - DZIAŁAJĄCA APLIKACJA
+// SPEED DATING PRO - KOMPLETNY POPRAWIONY KOD
 // ============================================
 
 // ========== KONFIGURACJA ==========
@@ -8,6 +8,65 @@ let eventData = {};
 let currentUser = null;
 let timerInterval = null;
 let timeLeft = 0;
+
+// ========== POPRAWIONY SYSTEM SESJI ==========
+function getUserSessionId() {
+    try {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get('session');
+    } catch (error) {
+        console.error('Błąd pobierania sesji:', error);
+        return null;
+    }
+}
+
+function setUserSessionId(sessionId) {
+    try {
+        const url = new URL(window.location);
+        url.searchParams.set('session', sessionId);
+        window.history.replaceState({}, '', url);
+        return true;
+    } catch (error) {
+        console.error('Błąd ustawiania sesji:', error);
+        return false;
+    }
+}
+
+function getCurrentUser() {
+    try {
+        const sessionId = getUserSessionId();
+        if (!sessionId || !participants || participants.length === 0) {
+            return null;
+        }
+        
+        const user = participants.find(p => p && p.sessionId === sessionId && p.active !== false);
+        
+        if (user) {
+            user.lastSeen = new Date().toISOString();
+            const userIndex = participants.findIndex(p => p && p.id === user.id);
+            if (userIndex !== -1) {
+                participants[userIndex] = user;
+                localStorage.setItem('speedDatingParticipants', JSON.stringify(participants));
+            }
+        }
+        
+        return user || null;
+    } catch (error) {
+        console.error('Błąd pobierania użytkownika:', error);
+        return null;
+    }
+}
+
+function createNewSession() {
+    try {
+        const sessionId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        setUserSessionId(sessionId);
+        return sessionId;
+    } catch (error) {
+        console.error('Błąd tworzenia sesji:', error);
+        return null;
+    }
+}
 
 // ========== INICJALIZACJA DANYCH ==========
 function initializeData() {
@@ -25,6 +84,8 @@ function initializeData() {
             pairings: [],
             ratings: []
         };
+        
+        cleanOldSessions();
     } catch (error) {
         console.error('Błąd ładowania danych:', error);
         participants = [];
@@ -40,58 +101,19 @@ function initializeData() {
     }
 }
 
-// ========== SESJE UŻYTKOWNIKÓW ==========
-function getUserSessionId() {
+function cleanOldSessions() {
     try {
-        const urlParams = new URLSearchParams(window.location.search);
-        const sessionId = urlParams.get('session');
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        const activeParticipants = participants.filter(p => {
+            return p && p.lastSeen && p.lastSeen > oneHourAgo && p.active !== false;
+        });
         
-        if (!sessionId) {
-            return localStorage.getItem('userSessionId');
+        if (activeParticipants.length !== participants.length) {
+            participants = activeParticipants;
+            localStorage.setItem('speedDatingParticipants', JSON.stringify(participants));
         }
-        
-        return sessionId;
     } catch (error) {
-        console.error('Błąd pobierania sesji:', error);
-        return null;
-    }
-}
-
-function setUserSessionId(sessionId) {
-    try {
-        localStorage.setItem('userSessionId', sessionId);
-        
-        const url = new URL(window.location);
-        url.searchParams.set('session', sessionId);
-        window.history.replaceState({}, '', url);
-    } catch (error) {
-        console.error('Błąd ustawiania sesji:', error);
-    }
-}
-
-function getCurrentUser() {
-    try {
-        const sessionId = getUserSessionId();
-        if (!sessionId || !participants || participants.length === 0) {
-            return null;
-        }
-        
-        return participants.find(p => p && p.sessionId === sessionId) || null;
-    } catch (error) {
-        console.error('Błąd pobierania użytkownika:', error);
-        return null;
-    }
-}
-
-function saveUserSession(user) {
-    try {
-        const sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        user.sessionId = sessionId;
-        setUserSessionId(sessionId);
-        return sessionId;
-    } catch (error) {
-        console.error('Błąd zapisywania sesji:', error);
-        return null;
+        console.error('Błąd czyszczenia sesji:', error);
     }
 }
 
@@ -99,10 +121,8 @@ function saveUserSession(user) {
 function initApp() {
     console.log('Inicjalizacja aplikacji...');
     
-    // 1. Inicjalizuj dane
     initializeData();
     
-    // 2. Sprawdź czy DOM jest gotowy
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function() {
             console.log('DOM załadowany, wykrywanie roli...');
@@ -113,7 +133,6 @@ function initApp() {
         detectRole();
     }
     
-    // 3. Dodaj globalne style
     addGlobalStyles();
 }
 
@@ -121,16 +140,13 @@ function initApp() {
 function detectRole() {
     console.log('Wykrywanie roli użytkownika...');
     
-    // Najpierw ukryj wszystkie ekrany
     hideAllScreens();
     
-    // Pokaż loading screen
     const loadingScreen = document.getElementById('loading-screen');
     if (loadingScreen) {
         loadingScreen.classList.add('active');
     }
     
-    // Krótkie opóźnienie dla pewności, że DOM jest gotowy
     setTimeout(() => {
         try {
             const urlParams = new URLSearchParams(window.location.search);
@@ -138,32 +154,35 @@ function detectRole() {
             const hasSession = urlParams.has('session');
             
             console.log('URL params:', { hasParticipant, hasSession });
-            console.log('Uczestnicy:', participants.length);
             
-            // Sprawdź czy użytkownik ma aktywną sesję
             currentUser = getCurrentUser();
-            console.log('Bieżący użytkownik:', currentUser ? currentUser.username : 'brak');
             
             if (currentUser) {
-                console.log('Pokazuję panel użytkownika dla:', currentUser.username);
+                console.log('Znaleziono aktywną sesję dla:', currentUser.username);
                 showUserPanel();
                 return;
             }
             
-            // Jeśli nie ma użytkownika i nie ma parametru participant - to admin
+            if (hasSession && !currentUser) {
+                console.log('Niepoprawna sesja, pokazuję rejestrację');
+                const url = new URL(window.location);
+                url.searchParams.delete('session');
+                window.history.replaceState({}, '', url);
+                showRegistrationScreen();
+                return;
+            }
+            
             if (!hasParticipant && !hasSession) {
                 console.log('Pokazuję panel administratora');
                 showAdminPanel();
                 return;
             }
             
-            // Jeśli jest parametr participant lub session - pokaż rejestrację
-            console.log('Pokazuję ekran rejestracji');
+            console.log('Pokazuję ekran rejestracji dla nowego użytkownika');
             showRegistrationScreen();
             
         } catch (error) {
             console.error('Błąd w detectRole:', error);
-            // W razie błędu pokaż ekran błędu
             showErrorScreen('Błąd ładowania aplikacji: ' + error.message);
         }
     }, 300);
@@ -181,7 +200,6 @@ function showRegistrationScreen() {
     
     loginScreen.classList.add('active');
     
-    // Sprawdź limit uczestników
     const activeParticipants = participants.filter(p => p && p.active !== false);
     if (activeParticipants.length >= 50) {
         loginScreen.innerHTML = `
@@ -193,22 +211,24 @@ function showRegistrationScreen() {
                 <p style="color: #666; margin: 20px 0;">
                     Niestety, osiągnięto maksymalną liczbę 50 uczestników.
                 </p>
-                <button onclick="location.reload()" class="btn">
-                    <i class="fas fa-redo"></i> Odśwież
+                <button onclick="location.href=location.pathname" class="btn">
+                    <i class="fas fa-home"></i> Strona główna
                 </button>
             </div>
         `;
         return;
     }
     
-    // Inicjalizuj formularz rejestracji
+    const url = new URL(window.location);
+    url.searchParams.delete('session');
+    window.history.replaceState({}, '', url);
+    
     setTimeout(() => {
         initializeRegistrationForm();
     }, 100);
 }
 
 function initializeRegistrationForm() {
-    // Obsługa wyboru płci
     document.querySelectorAll('.option-btn:not(.multi)').forEach(btn => {
         btn.addEventListener('click', function() {
             document.querySelectorAll('.option-btn:not(.multi)').forEach(b => b.classList.remove('selected'));
@@ -218,7 +238,6 @@ function initializeRegistrationForm() {
         });
     });
     
-    // Obsługa wyboru zainteresowań
     document.querySelectorAll('.option-btn.multi').forEach(btn => {
         btn.addEventListener('click', function() {
             this.classList.toggle('selected');
@@ -226,12 +245,11 @@ function initializeRegistrationForm() {
         });
     });
     
-    // Obsługa formularza
     const form = document.getElementById('register-form');
     if (form) {
-        form.addEventListener('submit', handleRegistration);
-    } else {
-        console.error('Formularz rejestracji nie znaleziony');
+        const newForm = form.cloneNode(true);
+        form.parentNode.replaceChild(newForm, form);
+        document.getElementById('register-form').addEventListener('submit', handleRegistration);
     }
 }
 
@@ -246,11 +264,12 @@ function updateInterests() {
 
 function handleRegistration(e) {
     e.preventDefault();
+    e.stopPropagation();
     
-    const username = document.getElementById('reg-username')?.value?.trim();
-    const email = document.getElementById('reg-email')?.value?.trim();
-    const gender = document.getElementById('reg-gender')?.value;
-    const interests = document.getElementById('reg-interests')?.value;
+    const username = document.getElementById('reg-username')?.value?.trim() || '';
+    const email = document.getElementById('reg-email')?.value?.trim() || '';
+    const gender = document.getElementById('reg-gender')?.value || '';
+    const interests = document.getElementById('reg-interests')?.value || '[]';
     
     if (!username || !email || !gender || !interests) {
         alert('Proszę wypełnić wszystkie pola!');
@@ -262,19 +281,24 @@ function handleRegistration(e) {
         return;
     }
     
-    // Sprawdź czy email już istnieje
-    if (participants.some(p => p && p.email === email)) {
+    const existingUser = participants.find(p => p && p.email === email && p.active !== false);
+    if (existingUser) {
         alert('Ten adres email jest już zarejestrowany!');
         return;
     }
     
-    // Sprawdź czy nazwa użytkownika już istnieje
-    if (participants.some(p => p && p.username === username)) {
+    const existingUsername = participants.find(p => p && p.username === username && p.active !== false);
+    if (existingUsername) {
         alert('Ta nazwa użytkownika jest już zajęta!');
         return;
     }
     
-    // Stwórz nowego uczestnika
+    const sessionId = createNewSession();
+    if (!sessionId) {
+        alert('Błąd tworzenia sesji! Spróbuj ponownie.');
+        return;
+    }
+    
     const newUser = {
         id: Date.now(),
         username: username,
@@ -285,14 +309,10 @@ function handleRegistration(e) {
         ratings: {},
         tableHistory: [],
         active: true,
-        lastSeen: new Date().toISOString()
+        lastSeen: new Date().toISOString(),
+        sessionId: sessionId
     };
     
-    // Zapisz sesję
-    const sessionId = saveUserSession(newUser);
-    newUser.sessionId = sessionId;
-    
-    // Dodaj do listy
     participants.push(newUser);
     localStorage.setItem('speedDatingParticipants', JSON.stringify(participants));
     
@@ -317,16 +337,13 @@ function showUserPanel() {
     
     userPanel.classList.add('active');
     
-    // Aktualizuj dane użytkownika
     const userNameElement = document.getElementById('user-name');
     if (userNameElement && currentUser) {
         userNameElement.textContent = currentUser.username;
     }
     
-    // Aktualizuj zawartość
     updateUserContent();
     
-    // Obsługa wylogowania
     const logoutBtn = document.getElementById('user-logout');
     if (logoutBtn) {
         logoutBtn.addEventListener('click', handleLogout);
@@ -336,13 +353,6 @@ function showUserPanel() {
 function updateUserContent() {
     const userContent = document.getElementById('user-content');
     if (!userContent) return;
-    
-    // Aktualizuj lastSeen
-    const userIndex = participants.findIndex(p => p && p.id === currentUser.id);
-    if (userIndex !== -1) {
-        participants[userIndex].lastSeen = new Date().toISOString();
-        localStorage.setItem('speedDatingParticipants', JSON.stringify(participants));
-    }
     
     if (eventData.status === 'waiting') {
         userContent.innerHTML = `
@@ -397,7 +407,6 @@ function showUserTable() {
         return;
     }
     
-    // Znajdź stolik użytkownika
     let userTable = null;
     let partner = null;
     
@@ -411,7 +420,6 @@ function showUserTable() {
         }
     }
     
-    // Jeśli nie w parach, sprawdź przerwę
     if (!userTable && roundPairings.breakTable) {
         const inBreak = roundPairings.breakTable.find(p => p && p.id === currentUser.id);
         if (inBreak) {
@@ -484,7 +492,6 @@ function showUserTable() {
             </div>
         `;
         
-        // Timer rozmowy
         startUserTimer(eventData.roundTime * 60, function() {
             const ratingBtn = document.getElementById('start-rating-btn');
             if (ratingBtn) {
@@ -540,11 +547,18 @@ function formatTime(seconds) {
 }
 
 function handleLogout() {
-    localStorage.removeItem('userSessionId');
-    
     const url = new URL(window.location);
     url.searchParams.delete('session');
     window.history.replaceState({}, '', url);
+    
+    if (currentUser) {
+        const userIndex = participants.findIndex(p => p && p.id === currentUser.id);
+        if (userIndex !== -1) {
+            participants[userIndex].active = false;
+            participants[userIndex].loggedOutAt = new Date().toISOString();
+            localStorage.setItem('speedDatingParticipants', JSON.stringify(participants));
+        }
+    }
     
     currentUser = null;
     location.href = location.pathname + '?participant';
@@ -562,16 +576,13 @@ function showRatingScreen(partner) {
     
     ratingScreen.classList.add('active');
     
-    // Zaktualizuj nazwę osoby do oceny
     const ratePerson = document.getElementById('rate-person');
     if (ratePerson && partner) {
         ratePerson.textContent = partner.username || 'Rozmówca';
     }
     
-    // Zresetuj wybór
     let selectedRating = null;
     
-    // Obsługa przycisków oceny
     document.querySelectorAll('.rate-btn').forEach(btn => {
         btn.addEventListener('click', function() {
             document.querySelectorAll('.rate-btn').forEach(b => b.classList.remove('selected'));
@@ -580,7 +591,6 @@ function showRatingScreen(partner) {
         });
     });
     
-    // Obsługa wysłania oceny
     const submitBtn = document.getElementById('submit-rating');
     if (submitBtn) {
         submitBtn.addEventListener('click', function() {
@@ -594,7 +604,6 @@ function showRatingScreen(partner) {
                 return;
             }
             
-            // Zapisz ocenę
             if (!currentUser.ratings) currentUser.ratings = {};
             currentUser.ratings[partner.id] = {
                 rating: selectedRating,
@@ -603,17 +612,14 @@ function showRatingScreen(partner) {
                 timestamp: new Date().toISOString()
             };
             
-            // Zaktualizuj dane użytkownika
             localStorage.setItem('currentUser', JSON.stringify(currentUser));
             
-            // Zaktualizuj w głównej liście
             const userIndex = participants.findIndex(p => p && p.id === currentUser.id);
             if (userIndex !== -1) {
                 participants[userIndex] = currentUser;
                 localStorage.setItem('speedDatingParticipants', JSON.stringify(participants));
             }
             
-            // Zapisz ocenę w danych wydarzenia
             if (!eventData.ratings) eventData.ratings = [];
             eventData.ratings.push({
                 from: currentUser.id,
@@ -644,19 +650,15 @@ function generateSmartPairings() {
                 breakTable: []
             };
             
-            // Losowa kolejność
             const shuffled = [...activeParticipants].sort(() => Math.random() - 0.5);
             const pairedIds = new Set();
             
-            // Proste dopasowanie
             for (let i = 0; i < shuffled.length; i++) {
                 if (pairedIds.has(shuffled[i].id)) continue;
                 
-                // Znajdź niezaparowaną osobę
                 for (let j = i + 1; j < shuffled.length; j++) {
                     if (pairedIds.has(shuffled[j].id)) continue;
                     
-                    // Utwórz parę
                     roundPairings.pairs.push([shuffled[i], shuffled[j]]);
                     pairedIds.add(shuffled[i].id);
                     pairedIds.add(shuffled[j].id);
@@ -664,7 +666,6 @@ function generateSmartPairings() {
                 }
             }
             
-            // Osoby bez pary idą na przerwę
             shuffled.forEach(p => {
                 if (!pairedIds.has(p.id)) {
                     roundPairings.breakTable.push(p);
@@ -691,7 +692,6 @@ function showAdminPanel() {
     
     const adminPanel = document.getElementById('admin-panel');
     if (!adminPanel) {
-        // Jeśli nie ma panelu admina, utwórz go dynamicznie
         createAdminPanel();
     } else {
         adminPanel.classList.add('active');
@@ -700,7 +700,6 @@ function showAdminPanel() {
 }
 
 function createAdminPanel() {
-    // Jeśli brakuje panelu admina, dodaj go dynamicznie
     const mainContainer = document.getElementById('app-container') || document.body;
     
     mainContainer.innerHTML = `
@@ -708,7 +707,6 @@ function createAdminPanel() {
             <div style="min-height: 100vh; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px;">
                 <div style="max-width: 1400px; margin: 0 auto;">
                     <div style="background: white; border-radius: 15px; padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
-                        <!-- Header -->
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #f0f0f0;">
                             <div>
                                 <h1 style="margin: 0; color: #333;">
@@ -722,7 +720,6 @@ function createAdminPanel() {
                             </div>
                         </div>
                         
-                        <!-- Stats Grid -->
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">
                             <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 4px solid #667eea;">
                                 <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #666;">Uczestnicy</h3>
@@ -743,9 +740,7 @@ function createAdminPanel() {
                             </div>
                         </div>
                         
-                        <!-- Two Columns Layout -->
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px;">
-                            <!-- Left Column: Participants List -->
                             <div>
                                 <div style="background: white; border-radius: 10px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); height: 100%;">
                                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
@@ -762,14 +757,12 @@ function createAdminPanel() {
                                 </div>
                             </div>
                             
-                            <!-- Right Column: Event Control -->
                             <div>
                                 <div style="background: white; border-radius: 10px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); height: 100%;">
                                     <h2 style="margin: 0 0 20px 0; color: #333; font-size: 18px;">
                                         <i class="fas fa-cogs"></i> Sterowanie wydarzeniem
                                     </h2>
                                     
-                                    <!-- Time Settings -->
                                     <div style="margin-bottom: 25px;">
                                         <h3 style="margin: 0 0 15px 0; color: #666; font-size: 16px;">Ustawienia czasu</h3>
                                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
@@ -796,7 +789,6 @@ function createAdminPanel() {
                                         </div>
                                     </div>
                                     
-                                    <!-- Event Control Buttons -->
                                     <div style="margin-bottom: 25px;">
                                         <h3 style="margin: 0 0 15px 0; color: #666; font-size: 16px;">Sterowanie</h3>
                                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
@@ -815,7 +807,6 @@ function createAdminPanel() {
                                         </div>
                                     </div>
                                     
-                                    <!-- Timer Control -->
                                     <div style="margin-bottom: 25px;">
                                         <h3 style="margin: 0 0 15px 0; color: #666; font-size: 16px;">Kontrola timera</h3>
                                         <div style="display: flex; gap: 10px;">
@@ -828,7 +819,6 @@ function createAdminPanel() {
                                         </div>
                                     </div>
                                     
-                                    <!-- Data Management -->
                                     <div>
                                         <h3 style="margin: 0 0 15px 0; color: #666; font-size: 16px;">Zarządzanie danymi</h3>
                                         <div style="display: flex; gap: 10px;">
@@ -844,9 +834,7 @@ function createAdminPanel() {
                             </div>
                         </div>
                         
-                        <!-- Tables Animation and URL -->
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
-                            <!-- Tables Animation -->
                             <div style="background: white; border-radius: 10px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
                                 <h2 style="margin: 0 0 20px 0; color: #333; font-size: 18px;">
                                     <i class="fas fa-chair"></i> Stoliki - Runda <span id="anim-round">1</span>
@@ -856,7 +844,6 @@ function createAdminPanel() {
                                 </div>
                             </div>
                             
-                            <!-- Participant URL -->
                             <div style="background: white; border-radius: 10px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
                                 <h2 style="margin: 0 0 20px 0; color: #333; font-size: 18px;">
                                     <i class="fas fa-link"></i> Link dla uczestników
@@ -867,7 +854,6 @@ function createAdminPanel() {
                             </div>
                         </div>
                         
-                        <!-- Footer Info -->
                         <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #f0f0f0; text-align: center;">
                             <p style="color: #666; font-size: 14px;">
                                 Speed Dating Pro v1.0 | Panel administratora
@@ -883,7 +869,6 @@ function createAdminPanel() {
 }
 
 function initializeAdminPanel() {
-    // Załaduj ustawienia
     const roundTimeInput = document.getElementById('round-time');
     const ratingTimeInput = document.getElementById('rating-time');
     const totalRoundsInput = document.getElementById('total-rounds');
@@ -892,7 +877,6 @@ function initializeAdminPanel() {
     if (ratingTimeInput) ratingTimeInput.value = eventData.ratingTime || 2;
     if (totalRoundsInput) totalRoundsInput.value = eventData.totalRounds || 3;
     
-    // Aktualizuj wyświetlane rundy
     const currentRoundDisplay = document.getElementById('current-round-display');
     const animRoundDisplay = document.getElementById('anim-round');
     const totalRoundsDisplay = document.getElementById('total-rounds-display');
@@ -901,13 +885,8 @@ function initializeAdminPanel() {
     if (animRoundDisplay) animRoundDisplay.textContent = eventData.currentRound || 1;
     if (totalRoundsDisplay) totalRoundsDisplay.textContent = eventData.totalRounds || 3;
     
-    // Aktualizuj URL dla uczestników
     updateParticipantURL();
-    
-    // Aktualizuj cały interfejs
     updateAdminInterface();
-    
-    // Dodaj event listeners
     setupAdminEventListeners();
 }
 
@@ -926,7 +905,7 @@ function updateParticipantURL() {
                     </button>
                 </div>
                 <div style="font-size: 12px; color: #666; background: #f8f9fa; padding: 10px; border-radius: 8px;">
-                    <i class="fas fa-info-circle"></i> Uczestnicy muszą wejść na ten link, aby się zarejestrować
+                    <i class="fas fa-info-circle"></i> Każdy uczestnik dostanie swój własny link po rejestracji.
                 </div>
             </div>
         `;
@@ -934,7 +913,6 @@ function updateParticipantURL() {
 }
 
 function setupAdminEventListeners() {
-    // Mapowanie przycisków do funkcji
     const buttonHandlers = {
         'save-time': saveTimeSettings,
         'start-event': startEvent,
@@ -947,7 +925,6 @@ function setupAdminEventListeners() {
         'clear-all': clearAllData
     };
     
-    // Przypisz event listeners
     for (const [id, handler] of Object.entries(buttonHandlers)) {
         const element = document.getElementById(id);
         if (element) {
@@ -955,42 +932,29 @@ function setupAdminEventListeners() {
         }
     }
     
-    // Dodaj globalny event listener dla odświeżania
     const refreshBtn = document.querySelector('[onclick="updateAdminInterface()"]');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', updateAdminInterface);
     }
 }
 
-// ========== FUNKCJE DLA PANELU ADMINA ==========
+// ========== FUNKCJE PANELU ADMINA ==========
 function updateAdminInterface() {
-    console.log('Aktualizacja interfejsu admina...');
-    
     try {
-        // Pobierz świeże dane
         initializeData();
         
         const activeParticipants = participants.filter(p => p && p.active !== false);
         
-        // Aktualizuj liczniki
         updateCounter('participant-count', `${activeParticipants.length}/50`);
         updateCounter('current-round-display', eventData.currentRound || 1);
         updateCounter('anim-round', eventData.currentRound || 1);
         updateCounter('total-rounds-display', eventData.totalRounds || 3);
         
-        // Aktualizuj statystyki
         updateStatistics();
-        
-        // Aktualizuj listę uczestników
         updateParticipantsList(activeParticipants);
-        
-        // Aktualizuj animację stolików
         updateTablesAnimation();
-        
-        // Aktualizuj timer
         updateMainTimerDisplay();
         
-        console.log('Interfejs admina zaktualizowany');
     } catch (error) {
         console.error('Błąd aktualizacji interfejsu admina:', error);
         showNotification('Błąd aktualizacji interfejsu: ' + error.message, 'error');
@@ -1007,11 +971,9 @@ function updateCounter(elementId, value) {
 function updateStatistics() {
     const activeParticipants = participants.filter(p => p && p.active !== false);
     
-    // Oblicz statystyki
     let pairsCount = 0;
     let breakCount = 0;
     let yesCount = 0;
-    let matchesCount = 0;
     
     if (eventData.pairings && eventData.pairings.length > 0) {
         const currentPairings = eventData.pairings[eventData.currentRound - 1];
@@ -1021,34 +983,13 @@ function updateStatistics() {
         }
     }
     
-    if (eventData.ratings && Array.isArray(eventData.ratings)) {
+    if (eventData.ratings) {
         yesCount = eventData.ratings.filter(r => r && r.rating === 'yes').length;
-        
-        // Oblicz wzajemne dopasowania
-        const mutualMatches = {};
-        eventData.ratings.forEach(rating => {
-            if (rating && rating.rating === 'yes') {
-                const pairKey = `${Math.min(rating.from, rating.to)}-${Math.max(rating.from, rating.to)}`;
-                if (!mutualMatches[pairKey]) {
-                    mutualMatches[pairKey] = { count: 0 };
-                }
-                mutualMatches[pairKey].count++;
-            }
-        });
-        
-        matchesCount = Object.values(mutualMatches).filter(match => match.count === 2).length;
     }
     
-    // Aktualizuj wyświetlane wartości
     updateCounter('pairs-count', pairsCount);
     updateCounter('break-count', breakCount);
     updateCounter('yes-count', yesCount);
-    
-    // Jeśli istnieje licznik dopasowań, zaktualizuj go
-    const matchesElement = document.getElementById('matches-count');
-    if (matchesElement) {
-        matchesElement.textContent = matchesCount;
-    }
 }
 
 function getParticipantStatus(userId) {
@@ -1064,7 +1005,6 @@ function getParticipantStatus(userId) {
     const currentPairings = eventData.pairings[eventData.currentRound - 1];
     if (!currentPairings) return 'Oczekuje';
     
-    // Sprawdź czy w parach
     if (currentPairings.pairs) {
         for (const pair of currentPairings.pairs) {
             if (pair && Array.isArray(pair)) {
@@ -1074,7 +1014,6 @@ function getParticipantStatus(userId) {
         }
     }
     
-    // Sprawdź czy na przerwie
     if (currentPairings.breakTable && Array.isArray(currentPairings.breakTable)) {
         const found = currentPairings.breakTable.find(p => p && p.id === userId);
         if (found) return 'Przerwa';
@@ -1085,10 +1024,7 @@ function getParticipantStatus(userId) {
 
 function updateParticipantsList(activeParticipants) {
     const participantsList = document.getElementById('participants-list');
-    if (!participantsList) {
-        console.error('Element participants-list nie znaleziony');
-        return;
-    }
+    if (!participantsList) return;
     
     if (activeParticipants.length === 0) {
         participantsList.innerHTML = `
@@ -1144,24 +1080,22 @@ function getStatusColor(userId) {
     if (eventData.pairings && eventData.pairings[eventData.currentRound - 1]) {
         const roundPairings = eventData.pairings[eventData.currentRound - 1];
         
-        // Sprawdź czy w parach
         if (roundPairings.pairs && Array.isArray(roundPairings.pairs)) {
             for (const pair of roundPairings.pairs) {
                 if (pair && Array.isArray(pair)) {
                     const found = pair.find(p => p && p.id === userId);
-                    if (found) return '#4CAF50'; // Zielony - w parze
+                    if (found) return '#4CAF50';
                 }
             }
         }
         
-        // Sprawdź czy na przerwie
         if (roundPairings.breakTable && Array.isArray(roundPairings.breakTable)) {
             const found = roundPairings.breakTable.find(p => p && p.id === userId);
-            if (found) return '#FF9800'; // Pomarańczowy - przerwa
+            if (found) return '#FF9800';
         }
     }
     
-    return '#666'; // Szary - oczekuje
+    return '#666';
 }
 
 function isUserOnline(lastSeen) {
@@ -1169,7 +1103,7 @@ function isUserOnline(lastSeen) {
     try {
         const lastSeenTime = new Date(lastSeen).getTime();
         const now = Date.now();
-        return (now - lastSeenTime) < 300000; // 5 minut
+        return (now - lastSeenTime) < 300000;
     } catch (error) {
         return false;
     }
@@ -1177,10 +1111,7 @@ function isUserOnline(lastSeen) {
 
 function updateTablesAnimation() {
     const animationContainer = document.getElementById('tables-animation');
-    if (!animationContainer) {
-        console.error('Element tables-animation nie znaleziony');
-        return;
-    }
+    if (!animationContainer) return;
     
     if (eventData.status !== 'active' || !eventData.pairings || eventData.pairings.length === 0) {
         animationContainer.innerHTML = `
@@ -1205,7 +1136,6 @@ function updateTablesAnimation() {
     
     let tablesHTML = '';
     
-    // Pokaż pary
     if (currentPairings.pairs && Array.isArray(currentPairings.pairs) && currentPairings.pairs.length > 0) {
         currentPairings.pairs.forEach((pair, index) => {
             if (pair && Array.isArray(pair) && pair.length === 2) {
@@ -1241,7 +1171,6 @@ function updateTablesAnimation() {
         });
     }
     
-    // Pokaż stolik przerw
     if (currentPairings.breakTable && Array.isArray(currentPairings.breakTable) && currentPairings.breakTable.length > 0) {
         tablesHTML += `
             <div style="background: #FFF3E0; border-radius: 10px; padding: 15px; border: 2px solid #FFE0B2; margin-top: 10px;">
@@ -1277,6 +1206,7 @@ function updateTablesAnimation() {
     animationContainer.innerHTML = tablesHTML;
 }
 
+// ========== FUNKCJE ADMINISTRATORA ==========
 function saveTimeSettings() {
     try {
         eventData.roundTime = parseInt(document.getElementById('round-time').value) || 5;
@@ -1433,7 +1363,6 @@ function clearAllData() {
     if (confirm('CZY NA PEWNO? To usunie WSZYSTKIE dane!')) {
         localStorage.removeItem('speedDatingParticipants');
         localStorage.removeItem('speedDatingEvent');
-        localStorage.removeItem('userSessionId');
         
         participants = [];
         eventData = {
@@ -1461,7 +1390,6 @@ function copyToClipboard(text) {
 }
 
 function showNotification(message, type = 'info') {
-    // Utwórz powiadomienie
     const notification = document.createElement('div');
     notification.style.cssText = `
         position: fixed;
@@ -1486,7 +1414,6 @@ function showNotification(message, type = 'info') {
     
     document.body.appendChild(notification);
     
-    // Usuń po 3 sekundach
     setTimeout(() => {
         notification.style.animation = 'slideOutRight 0.3s ease';
         setTimeout(() => {
@@ -1614,9 +1541,7 @@ function addGlobalStyles() {
 }
 
 // ========== URUCHOMIENIE APLIKACJI ==========
-// Rozpocznij aplikację
 initApp();
 
-// Dodaj globalne funkcje
 window.copyToClipboard = copyToClipboard;
 window.updateAdminInterface = updateAdminInterface;
