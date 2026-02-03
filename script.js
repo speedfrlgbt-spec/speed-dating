@@ -1,5 +1,5 @@
 // ============================================
-// SPEED DATING PRO - KOMPLETNY POPRAWIONY KOD
+// SPEED DATING PRO - KOMPLETNY KOD Z POPRAWKAMI
 // ============================================
 
 // ========== KONFIGURACJA ==========
@@ -132,8 +132,6 @@ function initApp() {
         console.log('DOM już załadowany, wykrywanie roli...');
         detectRole();
     }
-    
-    addGlobalStyles();
 }
 
 // ========== WYKRYWANIE ROLI ==========
@@ -188,7 +186,7 @@ function detectRole() {
     }, 300);
 }
 
-// ========== EKRAN REJESTRACJI ==========
+// ========== POPRAWIONA REJESTRACJA ==========
 function showRegistrationScreen() {
     hideAllScreens();
     
@@ -203,17 +201,19 @@ function showRegistrationScreen() {
     const activeParticipants = participants.filter(p => p && p.active !== false);
     if (activeParticipants.length >= 50) {
         loginScreen.innerHTML = `
-            <div style="padding: 40px; text-align: center; max-width: 500px; margin: 0 auto;">
-                <div style="font-size: 60px; color: #f44336; margin-bottom: 20px;">
-                    <i class="fas fa-users-slash"></i>
+            <div class="login-container">
+                <div style="text-align: center; padding: 40px;">
+                    <div style="font-size: 60px; color: #f44336; margin-bottom: 20px;">
+                        <i class="fas fa-users-slash"></i>
+                    </div>
+                    <h2 style="color: #333;">Limit uczestników osiągnięty</h2>
+                    <p style="color: #666; margin: 20px 0;">
+                        Niestety, osiągnięto maksymalną liczbę 50 uczestników.
+                    </p>
+                    <button onclick="location.href=location.pathname" class="btn btn-primary">
+                        <i class="fas fa-home"></i> Strona główna
+                    </button>
                 </div>
-                <h2 style="color: #333;">Limit uczestników osiągnięty</h2>
-                <p style="color: #666; margin: 20px 0;">
-                    Niestety, osiągnięto maksymalną liczbę 50 uczestników.
-                </p>
-                <button onclick="location.href=location.pathname" class="btn">
-                    <i class="fas fa-home"></i> Strona główna
-                </button>
             </div>
         `;
         return;
@@ -228,23 +228,31 @@ function showRegistrationScreen() {
     }, 100);
 }
 
+// POPRAWIONA FUNKCJA - ROZDZIELONE PRZYCISKI PŁCI I ZAINTERESOWAŃ
 function initializeRegistrationForm() {
-    document.querySelectorAll('.option-btn:not(.multi)').forEach(btn => {
+    // 1. OBSŁUGA PŁCI (tylko jeden wybór)
+    const genderButtons = document.querySelectorAll('#gender-selection .option-btn');
+    genderButtons.forEach(btn => {
         btn.addEventListener('click', function() {
-            document.querySelectorAll('.option-btn:not(.multi)').forEach(b => b.classList.remove('selected'));
+            // Odznacz wszystkie przyciski płci
+            genderButtons.forEach(b => b.classList.remove('selected'));
+            // Zaznacz tylko ten kliknięty
             this.classList.add('selected');
-            const genderInput = document.getElementById('reg-gender');
-            if (genderInput) genderInput.value = this.dataset.value;
+            document.getElementById('reg-gender').value = this.dataset.value;
         });
     });
     
-    document.querySelectorAll('.option-btn.multi').forEach(btn => {
+    // 2. OBSŁUGA ZAINTERESOWAŃ (wiele wyborów)
+    const interestButtons = document.querySelectorAll('#interests-selection .option-btn');
+    interestButtons.forEach(btn => {
         btn.addEventListener('click', function() {
+            // Przełącz tylko ten przycisk (dodaj/usuń zaznaczenie)
             this.classList.toggle('selected');
             updateInterests();
         });
     });
     
+    // 3. OBSŁUGA FORMULARZA
     const form = document.getElementById('register-form');
     if (form) {
         const newForm = form.cloneNode(true);
@@ -254,7 +262,7 @@ function initializeRegistrationForm() {
 }
 
 function updateInterests() {
-    const selected = Array.from(document.querySelectorAll('.option-btn.multi.selected'))
+    const selected = Array.from(document.querySelectorAll('#interests-selection .option-btn.selected'))
         .map(btn => btn.dataset.value);
     const interestsInput = document.getElementById('reg-interests');
     if (interestsInput) {
@@ -356,20 +364,18 @@ function updateUserContent() {
     
     if (eventData.status === 'waiting') {
         userContent.innerHTML = `
-            <div style="text-align: center; padding: 40px;">
-                <div style="font-size: 60px; color: #667eea; margin-bottom: 20px;">
+            <div class="waiting-screen">
+                <div class="waiting-icon">
                     <i class="fas fa-clock"></i>
                 </div>
-                <h3 style="color: #333; margin-bottom: 15px;">Czekamy na rozpoczęcie</h3>
-                <p style="color: #666; margin-bottom: 25px;">
-                    Wydarzenie jeszcze się nie rozpoczęło. Organizator poinformuje Cię, 
-                    kiedy będziesz mógł dołączyć do rozmów.
-                </p>
-                <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; text-align: left; max-width: 400px; margin: 0 auto;">
-                    <h4 style="color: #333; margin-bottom: 10px;">Twoje dane:</h4>
-                    <p><i class="fas fa-user" style="width: 20px; color: #667eea;"></i> <strong>Login:</strong> ${currentUser.username}</p>
-                    <p><i class="fas fa-venus-mars" style="width: 20px; color: #667eea;"></i> <strong>Płeć:</strong> ${currentUser.gender}</p>
-                    <p><i class="fas fa-heart" style="width: 20px; color: #667eea;"></i> <strong>Szukam:</strong> ${Array.isArray(currentUser.interested) ? currentUser.interested.join(', ') : currentUser.interested}</p>
+                <h3>Czekamy na rozpoczęcie</h3>
+                <p>Wydarzenie jeszcze się nie rozpoczęło. Organizator poinformuje Cię, 
+                kiedy będziesz mógł dołączyć do rozmów.</p>
+                <div class="user-info-box">
+                    <h4>Twoje dane:</h4>
+                    <p><i class="fas fa-user"></i> <strong>Login:</strong> ${currentUser.username}</p>
+                    <p><i class="fas fa-venus-mars"></i> <strong>Płeć:</strong> ${currentUser.gender}</p>
+                    <p><i class="fas fa-heart"></i> <strong>Szukam:</strong> ${Array.isArray(currentUser.interested) ? currentUser.interested.join(', ') : currentUser.interested}</p>
                 </div>
             </div>
         `;
@@ -377,12 +383,12 @@ function updateUserContent() {
         showUserTable();
     } else {
         userContent.innerHTML = `
-            <div style="text-align: center; padding: 40px;">
-                <div style="font-size: 60px; color: #4CAF50; margin-bottom: 20px;">
+            <div class="waiting-screen">
+                <div class="waiting-icon">
                     <i class="fas fa-flag-checkered"></i>
                 </div>
-                <h3 style="color: #333; margin-bottom: 15px;">Wydarzenie zakończone</h3>
-                <p style="color: #666;">Dziękujemy za udział! Organizator prześle Ci wyniki dopasowań.</p>
+                <h3>Wydarzenie zakończone</h3>
+                <p>Dziękujemy za udział! Organizator prześle Ci wyniki dopasowań.</p>
             </div>
         `;
     }
@@ -396,12 +402,12 @@ function showUserTable() {
     
     if (!roundPairings) {
         userContent.innerHTML = `
-            <div style="text-align: center; padding: 40px;">
-                <div style="font-size: 60px; color: #667eea; margin-bottom: 20px;">
+            <div class="waiting-screen">
+                <div class="waiting-icon">
                     <i class="fas fa-random"></i>
                 </div>
-                <h3 style="color: #333;">Trwa losowanie par...</h3>
-                <p style="color: #666;">Proszę czekać na przypisanie do stolika.</p>
+                <h3>Trwa losowanie par...</h3>
+                <p>Proszę czekać na przypisanie do stolika.</p>
             </div>
         `;
         return;
@@ -424,13 +430,9 @@ function showUserTable() {
         const inBreak = roundPairings.breakTable.find(p => p && p.id === currentUser.id);
         if (inBreak) {
             userContent.innerHTML = `
-                <div style="text-align: center; padding: 30px;">
-                    <h3 style="color: #333; margin-bottom: 20px;">
-                        <i class="fas fa-coffee" style="color: #FF9800;"></i> Przerwa - Runda ${eventData.currentRound}
-                    </h3>
-                    <p style="color: #666; margin-bottom: 30px;">
-                        W tej rundzie masz przerwę. Możesz odpocząć lub porozmawiać z innymi osobami.
-                    </p>
+                <div class="waiting-screen">
+                    <h3><i class="fas fa-coffee" style="color: #FF9800;"></i> Przerwa - Runda ${eventData.currentRound}</h3>
+                    <p style="margin: 20px 0;">W tej rundzie masz przerwę. Możesz odpocząć lub porozmawiać z innymi osobami.</p>
                     <div style="font-size: 48px; font-weight: bold; color: #667eea; margin: 20px 0; font-family: monospace;">
                         ${formatTime(eventData.roundTime * 60)}
                     </div>
@@ -486,7 +488,7 @@ function showUserTable() {
                     <p style="color: #666;">Pozostały czas rozmowy</p>
                 </div>
                 
-                <button id="start-rating-btn" class="btn" disabled style="padding: 15px 40px; font-size: 16px;">
+                <button id="start-rating-btn" class="btn btn-primary" disabled style="padding: 15px 40px; font-size: 16px;">
                     <i class="fas fa-hourglass-half"></i> Oceń po zakończeniu czasu
                 </button>
             </div>
@@ -506,12 +508,12 @@ function showUserTable() {
         });
     } else {
         userContent.innerHTML = `
-            <div style="text-align: center; padding: 40px;">
-                <div style="font-size: 60px; color: #FF9800; margin-bottom: 20px;">
+            <div class="waiting-screen">
+                <div class="waiting-icon">
                     <i class="fas fa-exclamation-triangle"></i>
                 </div>
-                <h3 style="color: #333;">Nie znaleziono stolika</h3>
-                <p style="color: #666;">Nie znaleziono stolika dla Ciebie w tej rundzie.</p>
+                <h3>Nie znaleziono stolika</h3>
+                <p>Nie znaleziono stolika dla Ciebie w tej rundzie.</p>
             </div>
         `;
     }
@@ -1440,104 +1442,12 @@ function showErrorScreen(message) {
                 </div>
                 <h2 style="color: #333; margin-bottom: 15px;">Błąd aplikacji</h2>
                 <p style="color: #666; margin-bottom: 25px;">${message}</p>
-                <button onclick="location.reload()" class="btn" style="padding: 12px 30px;">
+                <button onclick="location.reload()" class="btn btn-primary" style="padding: 12px 30px;">
                     <i class="fas fa-redo"></i> Odśwież stronę
                 </button>
             </div>
         </div>
     `;
-}
-
-function addGlobalStyles() {
-    const style = document.createElement('style');
-    style.textContent = `
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-        }
-        
-        .screen {
-            display: none;
-        }
-        
-        .screen.active {
-            display: block;
-        }
-        
-        .btn {
-            display: inline-block;
-            padding: 12px 24px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: bold;
-            transition: all 0.3s ease;
-            text-decoration: none;
-        }
-        
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-        }
-        
-        .btn:active {
-            transform: translateY(0);
-        }
-        
-        .btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
-        
-        input, select, textarea {
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            font-size: 14px;
-            font-family: inherit;
-        }
-        
-        input:focus, select:focus, textarea:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-        
-        @keyframes slideInRight {
-            from {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-        
-        @keyframes slideOutRight {
-            from {
-                transform: translateX(0);
-                opacity: 1;
-            }
-            to {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-        }
-    `;
-    document.head.appendChild(style);
 }
 
 // ========== URUCHOMIENIE APLIKACJI ==========
