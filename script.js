@@ -7,10 +7,10 @@ const CONFIG = {
     MAX_PARTICIPANTS: 50,
     MIN_PARTICIPANTS: 2,
     MAX_ROUNDS: 10,
-    MIN_ROUND_TIME: 1, // minuty
+    MIN_ROUND_TIME: 1,
     MAX_ROUND_TIME: 30,
-    SESSION_TIMEOUT: 30 * 60 * 1000, // 30 minut
-    HEARTBEAT_INTERVAL: 30000, // 30 sekund
+    SESSION_TIMEOUT: 30 * 60 * 1000,
+    HEARTBEAT_INTERVAL: 30000,
     RECONNECT_ATTEMPTS: 3,
     VERSION: '2.0.0'
 };
@@ -28,7 +28,7 @@ let isDemoMode = false;
 let connectionStatus = true;
 let heartbeatTimer = null;
 
-// ========== KLASY APLIKACJI ==========
+// ========== KLASA APLIKACJI ==========
 class SpeedDatingApp {
     constructor() {
         console.log(`Speed Dating Pro v${CONFIG.VERSION}`);
@@ -37,18 +37,18 @@ class SpeedDatingApp {
 
     initialize() {
         // Inicjalizacja toastr
-        if (typeof toastr !== 'undefined') {
-            toastr.options = {
-                positionClass: 'toast-top-right',
-                progressBar: true,
-                timeOut: 3000,
-                closeButton: true
-            };
-        }
+        toastr.options = {
+            positionClass: 'toast-top-right',
+            progressBar: true,
+            timeOut: 3000,
+            closeButton: true
+        };
 
         this.loadData();
         this.setupEventListeners();
         this.startHeartbeat();
+        
+        // Pokaż ekran ładowania
         this.showLoadingScreen();
         
         // Symulacja ładowania
@@ -59,7 +59,7 @@ class SpeedDatingApp {
 
     showLoadingScreen() {
         this.hideAllScreens();
-        document.getElementById('loading-screen')?.classList.add('active');
+        document.getElementById('loading-screen').classList.add('active');
     }
 
     hideAllScreens() {
@@ -70,17 +70,13 @@ class SpeedDatingApp {
 
     loadData() {
         try {
-            // Ładowanie uczestników
             const storedParticipants = localStorage.getItem('speedDatingParticipants');
             participants = storedParticipants ? JSON.parse(storedParticipants) : [];
             
-            // Czyszczenie nieaktywnych sesji
-            this.cleanOldSessions();
-            
-            // Ładowanie danych wydarzenia
             const storedEvent = localStorage.getItem('speedDatingEvent');
             eventData = storedEvent ? JSON.parse(storedEvent) : this.getDefaultEventData();
             
+            this.cleanOldSessions();
             console.log(`Załadowano ${participants.length} uczestników`);
         } catch (error) {
             console.error('Błąd ładowania danych:', error);
@@ -125,40 +121,9 @@ class SpeedDatingApp {
         participants = participants.filter(p => {
             if (!p || !p.lastSeen) return false;
             const lastSeen = new Date(p.lastSeen).getTime();
-            return (now - lastSeen) < CONFIG.SESSION_TIMEOUT && p.active !== false;
+            return (now - lastSeen) < CONFIG.SESSION_TIMEOUT;
         });
         this.saveData();
-    }
-
-    // ========== SYSTEM SESJI ==========
-    getUserSessionId() {
-        try {
-            return localStorage.getItem('currentSessionId');
-        } catch (error) {
-            console.error('Błąd pobierania sesji:', error);
-            return null;
-        }
-    }
-
-    setUserSessionId(sessionId) {
-        try {
-            localStorage.setItem('currentSessionId', sessionId);
-            return true;
-        } catch (error) {
-            console.error('Błąd ustawiania sesji:', error);
-            return false;
-        }
-    }
-
-    createNewSession() {
-        try {
-            const sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-            this.setUserSessionId(sessionId);
-            return sessionId;
-        } catch (error) {
-            console.error('Błąd tworzenia sesji:', error);
-            return null;
-        }
     }
 
     // ========== DETEKCJA ROLI ==========
@@ -166,18 +131,10 @@ class SpeedDatingApp {
         try {
             this.hideAllScreens();
             
-            // Sprawdź czy jesteśmy w trybie demo
-            if (isDemoMode) {
-                this.showUserPanel();
-                return;
-            }
-            
             // Sprawdź sesję użytkownika
-            const sessionId = this.getUserSessionId();
+            const sessionId = localStorage.getItem('currentSessionId');
             if (sessionId) {
-                currentUser = participants.find(p => 
-                    p && p.sessionId === sessionId && p.active !== false
-                );
+                currentUser = participants.find(p => p && p.sessionId === sessionId);
                 
                 if (currentUser) {
                     this.updateUserLastSeen();
@@ -204,13 +161,13 @@ class SpeedDatingApp {
 
     showModeSelection() {
         this.hideAllScreens();
-        document.getElementById('mode-screen')?.classList.add('active');
+        document.getElementById('mode-screen').classList.add('active');
     }
 
     // ========== EKRAN REJESTRACJI ==========
     showRegistrationScreen() {
         this.hideAllScreens();
-        document.getElementById('login-screen')?.classList.add('active');
+        document.getElementById('login-screen').classList.add('active');
         this.initializeRegistrationForm();
     }
 
@@ -237,33 +194,20 @@ class SpeedDatingApp {
             });
         });
 
-        // Licznik znaków w biografii
-        const bioTextarea = document.getElementById('reg-bio');
-        const bioCounter = document.getElementById('bio-counter');
-        
-        if (bioTextarea && bioCounter) {
-            bioTextarea.addEventListener('input', () => {
-                bioCounter.textContent = bioTextarea.value.length;
-                if (bioTextarea.value.length > 180) {
-                    bioCounter.classList.add('warning');
-                } else {
-                    bioCounter.classList.remove('warning');
-                }
-            });
-        }
-
-        // Przyciski nawigacji
+        // Obsługa przycisków nawigacji
         document.querySelectorAll('.btn-next').forEach(btn => {
             btn.addEventListener('click', () => {
-                if (this.validateStep(1)) {
-                    this.showStep(parseInt(btn.dataset.next));
+                const nextStep = parseInt(btn.dataset.next);
+                if (this.validateStep(nextStep - 1)) {
+                    this.showStep(nextStep);
                 }
             });
         });
 
         document.querySelectorAll('.btn-back-step').forEach(btn => {
             btn.addEventListener('click', () => {
-                this.showStep(parseInt(btn.dataset.prev));
+                const prevStep = parseInt(btn.dataset.prev);
+                this.showStep(prevStep);
             });
         });
 
@@ -279,15 +223,6 @@ class SpeedDatingApp {
             if (this.validateStep(3)) {
                 this.handleRegistration();
             }
-        });
-
-        // Walidacja w czasie rzeczywistym
-        document.getElementById('reg-username')?.addEventListener('input', () => {
-            this.validateUsername();
-        });
-
-        document.getElementById('reg-email')?.addEventListener('input', () => {
-            this.validateEmail();
         });
 
         // Ustaw pierwszy krok jako aktywny
@@ -337,17 +272,7 @@ class SpeedDatingApp {
     }
 
     validateStep2() {
-        let valid = true;
-        
-        if (!this.validateInterests()) valid = false;
-        
-        const age = document.getElementById('reg-age')?.value;
-        if (age && (age < 18 || age > 100)) {
-            this.showError('interests-error', 'Wiek musi być między 18 a 100 lat');
-            valid = false;
-        }
-        
-        return valid;
+        return this.validateInterests();
     }
 
     validateStep3() {
@@ -377,13 +302,8 @@ class SpeedDatingApp {
             return false;
         }
         
-        if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-            this.showError('username-error', 'Dozwolone tylko litery, cyfry i podkreślnik');
-            return false;
-        }
-        
         const existingUser = participants.find(p => 
-            p && p.username.toLowerCase() === username.toLowerCase() && p.active !== false
+            p && p.username.toLowerCase() === username.toLowerCase()
         );
         
         if (existingUser) {
@@ -409,15 +329,6 @@ class SpeedDatingApp {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
             this.showError('email-error', 'Podaj poprawny adres email');
-            return false;
-        }
-        
-        const existingEmail = participants.find(p => 
-            p && p.email.toLowerCase() === email.toLowerCase() && p.active !== false
-        );
-        
-        if (existingEmail) {
-            this.showError('email-error', 'Ten email jest już zarejestrowany');
             return false;
         }
         
@@ -507,7 +418,6 @@ class SpeedDatingApp {
 
     async handleRegistration() {
         try {
-            // Sprawdź limit uczestników
             const activeParticipants = participants.filter(p => p && p.active !== false);
             if (activeParticipants.length >= CONFIG.MAX_PARTICIPANTS) {
                 this.showNotification('Osiągnięto limit uczestników!', 'error');
@@ -528,7 +438,7 @@ class SpeedDatingApp {
                 status: 'active',
                 active: true,
                 lastSeen: new Date().toISOString(),
-                sessionId: this.createNewSession(),
+                sessionId: 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
                 avatarColor: this.getRandomColor()
             };
 
@@ -537,6 +447,7 @@ class SpeedDatingApp {
             this.saveData();
 
             this.showNotification('Rejestracja zakończona sukcesem!', 'success');
+            localStorage.setItem('currentSessionId', userData.sessionId);
             this.showUserPanel();
 
         } catch (error) {
@@ -553,7 +464,7 @@ class SpeedDatingApp {
     // ========== PANEL UŻYTKOWNIKA ==========
     showUserPanel() {
         this.hideAllScreens();
-        document.getElementById('user-panel')?.classList.add('active');
+        document.getElementById('user-panel').classList.add('active');
         
         if (!currentUser) {
             this.showRegistrationScreen();
@@ -561,68 +472,20 @@ class SpeedDatingApp {
         }
 
         this.updateUserInterface();
-        this.setupUserPanelListeners();
     }
 
     updateUserInterface() {
         // Aktualizuj nagłówek
         const userNameElement = document.getElementById('user-name');
-        const avatarIcon = document.getElementById('user-avatar-icon');
-        
         if (userNameElement) userNameElement.textContent = currentUser.username;
-        if (avatarIcon) avatarIcon.style.color = currentUser.avatarColor || '#667eea';
         
-        // Aktualizuj status wydarzenia
-        this.updateEventStatus();
+        // Przycisk wylogowania
+        document.getElementById('user-logout').addEventListener('click', () => {
+            this.handleLogout();
+        });
         
-        // Aktualizuj zawartość
-        this.updateUserContent();
-        
-        // Aktualizuj stopkę
-        this.updateFooter();
-    }
-
-    updateEventStatus() {
-        const statusElement = document.getElementById('event-status');
-        const participantsElement = document.getElementById('event-participants');
-        
-        if (statusElement) {
-            const statusText = eventData.status === 'waiting' ? 'Oczekiwanie' :
-                             eventData.status === 'active' ? 'W trakcie' : 'Zakończone';
-            statusElement.textContent = `Status: ${statusText}`;
-        }
-        
-        if (participantsElement) {
-            const activeCount = participants.filter(p => p && p.active !== false).length;
-            participantsElement.textContent = `Uczestników: ${activeCount}`;
-        }
-    }
-
-    updateUserContent() {
-        const contentElement = document.getElementById('user-content');
-        if (!contentElement) return;
-
-        const activeSection = document.querySelector('.nav-item.active')?.dataset.section || 'dashboard';
-        
-        switch(activeSection) {
-            case 'dashboard':
-                this.renderDashboard();
-                break;
-            case 'current-round':
-                this.renderCurrentRound();
-                break;
-            case 'matches':
-                this.renderMatches();
-                break;
-            case 'history':
-                this.renderHistory();
-                break;
-            case 'settings':
-                this.renderSettings();
-                break;
-            default:
-                this.renderDashboard();
-        }
+        // Renderuj dashboard
+        this.renderDashboard();
     }
 
     renderDashboard() {
@@ -695,15 +558,6 @@ class SpeedDatingApp {
                         <div class="timer-display">${this.formatTime((eventData.roundTime || 5) * 60)}</div>
                     </div>
                 </div>
-                
-                <div class="dashboard-section">
-                    <div class="section-header">
-                        <h2><i class="fas fa-chair"></i> Twój stolik</h2>
-                    </div>
-                    <div id="current-table-container">
-                        <!-- Zawartość stolika zostanie załadowana dynamicznie -->
-                    </div>
-                </div>
             `;
         } else if (eventData.status === 'waiting') {
             html += `
@@ -721,194 +575,9 @@ class SpeedDatingApp {
                     </div>
                 </div>
             `;
-        } else {
-            html += `
-                <div class="dashboard-section">
-                    <div class="section-header">
-                        <h2><i class="fas fa-flag-checkered"></i> Wydarzenie zakończone</h2>
-                    </div>
-                    <div class="finished-message">
-                        <div class="finished-icon">
-                            <i class="fas fa-trophy"></i>
-                        </div>
-                        <h3>Dziękujemy za udział!</h3>
-                        <p>Twoje wyniki zostały zapisane.</p>
-                        <div class="final-stats">
-                            <p>Rozegrane rundy: <strong>${eventData.currentRound || 0}</strong></p>
-                            <p>Twoje oceny: <strong>${Object.keys(currentUser.ratings || {}).length}</strong></p>
-                            <p>Dopasowania: <strong>${this.calculateMatches().length}</strong></p>
-                        </div>
-                    </div>
-                </div>
-            `;
         }
 
         content.innerHTML = html;
-        
-        // Aktualizuj stolik jeśli wydarzenie aktywne
-        if (eventData.status === 'active') {
-            this.updateCurrentTable();
-        }
-    }
-
-    updateCurrentTable() {
-        const container = document.getElementById('current-table-container');
-        if (!container) return;
-
-        if (eventData.status !== 'active') {
-            container.innerHTML = `
-                <div class="no-active-round">
-                    <i class="fas fa-clock"></i>
-                    <h3>Brak aktywnej rundy</h3>
-                </div>
-            `;
-            return;
-        }
-
-        const roundPairings = eventData.pairings?.[eventData.currentRound - 1];
-        
-        if (!roundPairings || !roundPairings.pairs) {
-            container.innerHTML = `
-                <div class="table-waiting">
-                    <div class="loading-spinner">
-                        <i class="fas fa-random"></i>
-                    </div>
-                    <h3>Losowanie par...</h3>
-                    <p>Proszę czekać na przypisanie do stolika</p>
-                </div>
-            `;
-            return;
-        }
-
-        // Znajdź parę użytkownika
-        let userTable = null;
-        let partner = null;
-        
-        for (const pair of roundPairings.pairs) {
-            if (pair && Array.isArray(pair)) {
-                const userInPair = pair.find(p => p && p.id === currentUser.id);
-                if (userInPair) {
-                    partner = pair.find(p => p && p.id !== currentUser.id);
-                    userTable = pair;
-                    break;
-                }
-            }
-        }
-
-        // Sprawdź czy użytkownik jest na przerwie
-        if (!userTable && roundPairings.breakTable) {
-            const inBreak = roundPairings.breakTable.find(p => p && p.id === currentUser.id);
-            if (inBreak) {
-                container.innerHTML = `
-                    <div class="break-screen">
-                        <div class="break-icon">
-                            <i class="fas fa-coffee"></i>
-                        </div>
-                        <h3>Przerwa - Runda ${eventData.currentRound}</h3>
-                        <p>W tej rundzie masz przerwę. Możesz odpocząć lub porozmawiać z innymi osobami.</p>
-                        <div class="break-timer">
-                            <div class="timer-display">${this.formatTime((eventData.roundTime || 5) * 60)}</div>
-                            <p class="timer-label">Pozostały czas rundy</p>
-                        </div>
-                    </div>
-                `;
-                return;
-            }
-        }
-
-        if (userTable && partner) {
-            container.innerHTML = `
-                <div class="table-display">
-                    <div class="table-card active">
-                        <div class="table-header">
-                            <div class="table-number">
-                                <i class="fas fa-chair"></i> Stolik
-                            </div>
-                            <div class="table-round">
-                                Runda ${eventData.currentRound}
-                            </div>
-                        </div>
-                        
-                        <div class="table-participants">
-                            <div class="participant current-user">
-                                <div class="participant-avatar" style="background: ${currentUser.avatarColor || '#667eea'}">
-                                    <i class="fas fa-user"></i>
-                                </div>
-                                <div class="participant-name">${currentUser.username}</div>
-                                <div class="participant-gender">TY</div>
-                            </div>
-                            
-                            <div class="table-divider">
-                                <i class="fas fa-heart"></i>
-                            </div>
-                            
-                            <div class="participant partner-user">
-                                <div class="participant-avatar" style="background: ${partner.avatarColor || '#ff6b6b'}">
-                                    <i class="fas fa-user"></i>
-                                </div>
-                                <div class="participant-name">${partner.username}</div>
-                                <div class="participant-gender">ROZMÓWCA</div>
-                            </div>
-                        </div>
-                        
-                        <div class="table-timer">
-                            <div class="timer-display">${this.formatTime((eventData.roundTime || 5) * 60)}</div>
-                            <div class="timer-label">Pozostały czas rozmowy</div>
-                        </div>
-                        
-                        <div class="table-actions">
-                            <button class="btn btn-primary btn-block" id="start-rating-btn" disabled>
-                                <i class="fas fa-hourglass-half"></i> Oceń po zakończeniu czasu
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            // Rozpocznij timer
-            this.startTableTimer((eventData.roundTime || 5) * 60, () => {
-                const ratingBtn = document.getElementById('start-rating-btn');
-                if (ratingBtn) {
-                    ratingBtn.disabled = false;
-                    ratingBtn.innerHTML = '<i class="fas fa-star"></i> Oceń rozmówcę TERAZ';
-                    ratingBtn.addEventListener('click', () => {
-                        this.showRatingScreen(partner);
-                    });
-                }
-            });
-
-        } else {
-            container.innerHTML = `
-                <div class="no-table-assigned">
-                    <div class="error-icon">
-                        <i class="fas fa-exclamation-triangle"></i>
-                    </div>
-                    <h3>Nie znaleziono stolika</h3>
-                    <p>Nie znaleziono stolika dla Ciebie w tej rundzie.</p>
-                </div>
-            `;
-        }
-    }
-
-    startTableTimer(seconds, onComplete) {
-        let timeLeft = seconds;
-        const timerElement = document.querySelector('.table-timer .timer-display');
-        
-        if (!timerElement) return;
-        
-        const interval = setInterval(() => {
-            timeLeft--;
-            timerElement.textContent = this.formatTime(timeLeft);
-            
-            if (timeLeft < 60) {
-                timerElement.style.color = '#ef4444';
-            }
-            
-            if (timeLeft <= 0) {
-                clearInterval(interval);
-                if (onComplete) onComplete();
-            }
-        }, 1000);
     }
 
     calculateMatches() {
@@ -917,12 +586,10 @@ class SpeedDatingApp {
         const matches = [];
         const userRatings = currentUser.ratings;
         
-        // Znajdź wzajemne dopasowania
         for (const [ratedUserId, rating] of Object.entries(userRatings)) {
             const ratedUser = participants.find(p => p && p.id === ratedUserId);
             if (!ratedUser || !ratedUser.ratings) continue;
             
-            // Sprawdź czy ta osoba również Cię oceniła
             const theirRating = ratedUser.ratings[currentUser.id];
             if (theirRating && theirRating.rating === 'yes' && rating.rating === 'yes') {
                 matches.push({
@@ -937,237 +604,10 @@ class SpeedDatingApp {
         return matches;
     }
 
-    renderMatches() {
-        const content = document.getElementById('user-content');
-        if (!content) return;
-
-        const matches = this.calculateMatches();
-        
-        let html = `
-            <div class="dashboard-section">
-                <div class="section-header">
-                    <h2><i class="fas fa-heart"></i> Twoje dopasowania</h2>
-                    <div class="matches-summary">
-                        <span class="badge success">${matches.length} dopasowań</span>
-                    </div>
-                </div>
-        `;
-
-        if (matches.length === 0) {
-            html += `
-                <div class="no-matches">
-                    <div class="no-matches-icon">
-                        <i class="fas fa-heart-broken"></i>
-                    </div>
-                    <h3>Brak dopasowań</h3>
-                    <p>Jeszcze nie masz żadnych wzajemnych dopasowań.</p>
-                    <p>Kontynuuj rozmowy i oceniaj uczestników!</p>
-                </div>
-            `;
-        } else {
-            html += `
-                <div class="matches-grid">
-                    ${matches.map(match => {
-                        const participant = participants.find(p => p && p.id === match.partnerId);
-                        if (!participant) return '';
-                        
-                        return `
-                            <div class="match-card" data-user-id="${participant.id}">
-                                <div class="match-avatar" style="background: ${participant.avatarColor || '#667eea'}">
-                                    <i class="fas fa-user"></i>
-                                </div>
-                                <div class="match-info">
-                                    <h3 class="match-name">${participant.username}</h3>
-                                    <div class="match-details">
-                                        <span class="match-gender">
-                                            <i class="fas fa-${participant.gender === 'male' ? 'mars' : participant.gender === 'female' ? 'venus' : 'genderless'}"></i>
-                                            ${participant.gender === 'male' ? 'Mężczyzna' : participant.gender === 'female' ? 'Kobieta' : 'Inna'}
-                                        </span>
-                                        <span class="match-score">
-                                            <i class="fas fa-star"></i> Dopasowanie
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                    }).join('')}
-                </div>
-            `;
-        }
-
-        html += `</div>`;
-        content.innerHTML = html;
-    }
-
-    renderHistory() {
-        const content = document.getElementById('user-content');
-        if (!content) return;
-
-        const userRatings = currentUser.ratings || {};
-        const ratingEntries = Object.entries(userRatings);
-
-        let html = `
-            <div class="dashboard-section">
-                <div class="section-header">
-                    <h2><i class="fas fa-history"></i> Historia rozmów</h2>
-                    <div class="history-summary">
-                        <span class="badge">${ratingEntries.length} rozmów</span>
-                    </div>
-                </div>
-        `;
-
-        if (ratingEntries.length === 0) {
-            html += `
-                <div class="no-history">
-                    <div class="no-history-icon">
-                        <i class="fas fa-comments"></i>
-                    </div>
-                    <h3>Brak historii</h3>
-                    <p>Jeszcze nie oceniłeś żadnych rozmówców.</p>
-                </div>
-            `;
-        } else {
-            html += `
-                <div class="history-timeline">
-                    ${ratingEntries.map(([partnerId, rating]) => {
-                        const partner = participants.find(p => p && p.id === partnerId);
-                        if (!partner) return '';
-                        
-                        const ratingDate = new Date(rating.timestamp);
-                        const ratingIcon = rating.rating === 'yes' ? 'fa-thumbs-up text-success' :
-                                         rating.rating === 'no' ? 'fa-thumbs-down text-danger' :
-                                         'fa-question text-warning';
-                        
-                        return `
-                            <div class="timeline-item">
-                                <div class="timeline-date">
-                                    ${ratingDate.toLocaleDateString()} ${ratingDate.toLocaleTimeString()}
-                                </div>
-                                <div class="timeline-content">
-                                    <div class="timeline-avatar" style="background: ${partner.avatarColor || '#667eea'}">
-                                        <i class="fas fa-user"></i>
-                                    </div>
-                                    <div class="timeline-details">
-                                        <h4>Rozmowa z ${partner.username}</h4>
-                                        <div class="timeline-rating">
-                                            <i class="fas ${ratingIcon}"></i>
-                                            <span>Ocena: ${rating.rating === 'yes' ? 'TAK' : rating.rating === 'no' ? 'NIE' : 'MOŻE'}</span>
-                                        </div>
-                                        ${rating.note ? `
-                                            <div class="timeline-note">
-                                                <i class="fas fa-comment"></i>
-                                                <p>${rating.note}</p>
-                                            </div>
-                                        ` : ''}
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                    }).join('')}
-                </div>
-            `;
-        }
-
-        html += `</div>`;
-        content.innerHTML = html;
-    }
-
-    renderSettings() {
-        const content = document.getElementById('user-content');
-        if (!content) return;
-
-        const html = `
-            <div class="dashboard-section">
-                <div class="section-header">
-                    <h2><i class="fas fa-user-edit"></i> Edytuj profil</h2>
-                </div>
-                
-                <div class="profile-form">
-                    <div class="form-group">
-                        <label for="profile-username">
-                            <i class="fas fa-user"></i> Nazwa użytkownika
-                        </label>
-                        <input type="text" id="profile-username" value="${currentUser.username}" disabled>
-                        <div class="form-hint">Nazwy użytkownika nie można zmienić</div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="profile-email">
-                            <i class="fas fa-envelope"></i> Email
-                        </label>
-                        <input type="email" id="profile-email" value="${currentUser.email}">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="profile-bio">
-                            <i class="fas fa-comment-alt"></i> O sobie
-                        </label>
-                        <textarea id="profile-bio" rows="4">${currentUser.bio || ''}</textarea>
-                    </div>
-                    
-                    <div class="form-actions">
-                        <button type="button" class="btn btn-primary" id="save-profile">
-                            <i class="fas fa-save"></i> Zapisz zmiany
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        content.innerHTML = html;
-
-        // Obsługa zapisywania profilu
-        document.getElementById('save-profile')?.addEventListener('click', () => {
-            this.saveProfileChanges();
-        });
-    }
-
-    saveProfileChanges() {
-        const emailInput = document.getElementById('profile-email');
-        const bioTextarea = document.getElementById('profile-bio');
-        
-        if (!emailInput || !bioTextarea) return;
-        
-        const email = emailInput.value.trim();
-        const bio = bioTextarea.value.trim();
-
-        // Walidacja email
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
-            this.showNotification('Podaj poprawny adres email', 'error');
-            return;
-        }
-
-        // Sprawdź czy email nie jest już używany
-        const existingEmail = participants.find(p => 
-            p && p.id !== currentUser.id && 
-            p.email.toLowerCase() === email.toLowerCase() && 
-            p.active !== false
-        );
-
-        if (existingEmail) {
-            this.showNotification('Ten email jest już używany', 'error');
-            return;
-        }
-
-        // Aktualizuj dane użytkownika
-        currentUser.email = email;
-        currentUser.bio = bio;
-
-        // Znajdź i zaktualizuj użytkownika w tablicy participants
-        const userIndex = participants.findIndex(p => p && p.id === currentUser.id);
-        if (userIndex !== -1) {
-            participants[userIndex] = currentUser;
-            this.saveData();
-        }
-
-        this.showNotification('Profil zaktualizowany pomyślnie', 'success');
-    }
-
     // ========== PANEL ADMINISTRATORA ==========
     showAdminPanel() {
         this.hideAllScreens();
-        document.getElementById('admin-panel')?.classList.add('active');
+        document.getElementById('admin-panel').classList.add('active');
         this.renderAdminPanel();
     }
 
@@ -1176,9 +616,6 @@ class SpeedDatingApp {
         if (!adminPanel) return;
 
         const activeParticipants = participants.filter(p => p && p.active !== false);
-        const ratingsCount = eventData.ratings?.length || 0;
-        const yesRatings = eventData.ratings?.filter(r => r.rating === 'yes').length || 0;
-        const currentPairings = eventData.pairings?.[eventData.currentRound - 1];
         
         adminPanel.innerHTML = `
             <div class="admin-container">
@@ -1207,9 +644,6 @@ class SpeedDatingApp {
                                 <div class="stat-content">
                                     <h3>Uczestnicy</h3>
                                     <div class="stat-value">${activeParticipants.length}/${CONFIG.MAX_PARTICIPANTS}</div>
-                                    <div class="stat-trend">
-                                        ${activeParticipants.length > 0 ? '<i class="fas fa-arrow-up"></i> Aktywni' : 'Brak'}
-                                    </div>
                                 </div>
                             </div>
                             
@@ -1218,9 +652,8 @@ class SpeedDatingApp {
                                     <i class="fas fa-handshake"></i>
                                 </div>
                                 <div class="stat-content">
-                                    <h3>Aktywne pary</h3>
-                                    <div class="stat-value">${currentPairings?.pairs?.length || 0}</div>
-                                    <div class="stat-trend">Bieżąca runda</div>
+                                    <h3>Status</h3>
+                                    <div class="stat-value">${eventData.status === 'active' ? 'Aktywny' : 'Oczekuje'}</div>
                                 </div>
                             </div>
                             
@@ -1229,9 +662,8 @@ class SpeedDatingApp {
                                     <i class="fas fa-coffee"></i>
                                 </div>
                                 <div class="stat-content">
-                                    <h3>Na przerwie</h3>
-                                    <div class="stat-value">${currentPairings?.breakTable?.length || 0}</div>
-                                    <div class="stat-trend">Osoby bez pary</div>
+                                    <h3>Aktualna runda</h3>
+                                    <div class="stat-value">${eventData.currentRound || 1}</div>
                                 </div>
                             </div>
                             
@@ -1240,11 +672,8 @@ class SpeedDatingApp {
                                     <i class="fas fa-star"></i>
                                 </div>
                                 <div class="stat-content">
-                                    <h3>Oceny TAK</h3>
-                                    <div class="stat-value">${yesRatings}/${ratingsCount}</div>
-                                    <div class="stat-trend">
-                                        ${yesRatings > 0 ? '<i class="fas fa-heart"></i> Pozytywne' : 'Brak'}
-                                    </div>
+                                    <h3>Oceny</h3>
+                                    <div class="stat-value">${eventData.ratings?.length || 0}</div>
                                 </div>
                             </div>
                         </div>
@@ -1268,39 +697,12 @@ class SpeedDatingApp {
                                 </button>
                             </div>
                         </div>
-                        
-                        <div class="control-section">
-                            <h3><i class="fas fa-clock"></i> Ustawienia czasu</h3>
-                            <div class="time-settings">
-                                <div class="time-input">
-                                    <label>Czas rundy (min)</label>
-                                    <input type="number" id="round-time" value="${eventData.roundTime || 5}" min="1" max="30">
-                                </div>
-                                <div class="time-input">
-                                    <label>Czas oceny (min)</label>
-                                    <input type="number" id="rating-time" value="${eventData.ratingTime || 2}" min="1" max="10">
-                                </div>
-                                <div class="time-input">
-                                    <label>Liczba rund</label>
-                                    <input type="number" id="total-rounds" value="${eventData.totalRounds || 5}" min="1" max="10">
-                                </div>
-                                <button class="btn btn-primary" id="save-time-btn">
-                                    <i class="fas fa-save"></i> Zapisz
-                                </button>
-                            </div>
-                        </div>
                     </div>
                     
                     <div class="admin-tabs">
                         <div class="tab-buttons">
                             <button class="tab-btn active" data-tab="participants">
                                 <i class="fas fa-users"></i> Uczestnicy
-                            </button>
-                            <button class="tab-btn" data-tab="pairings">
-                                <i class="fas fa-chair"></i> Stoliki
-                            </button>
-                            <button class="tab-btn" data-tab="ratings">
-                                <i class="fas fa-star"></i> Oceny
                             </button>
                             <button class="tab-btn" data-tab="export">
                                 <i class="fas fa-download"></i> Eksport
@@ -1320,7 +722,6 @@ class SpeedDatingApp {
                                         <table class="participants-table">
                                             <thead>
                                                 <tr>
-                                                    <th>ID</th>
                                                     <th>Nazwa</th>
                                                     <th>Email</th>
                                                     <th>Płeć</th>
@@ -1331,7 +732,6 @@ class SpeedDatingApp {
                                             <tbody>
                                                 ${activeParticipants.map(p => `
                                                     <tr>
-                                                        <td>${p.id.substring(0, 8)}...</td>
                                                         <td>
                                                             <div class="participant-info">
                                                                 <div class="participant-avatar small" style="background: ${p.avatarColor || '#667eea'}">
@@ -1354,135 +754,14 @@ class SpeedDatingApp {
                                                             ).join('') || '-'}
                                                         </td>
                                                         <td>
-                                                            <span class="status-badge ${this.getParticipantStatus(p.id) === 'W parze' ? 'success' : 'warning'}">
-                                                                ${this.getParticipantStatus(p.id)}
+                                                            <span class="status-badge success">
+                                                                Aktywny
                                                             </span>
                                                         </td>
                                                     </tr>
                                                 `).join('')}
                                             </tbody>
                                         </table>
-                                    `}
-                                </div>
-                            </div>
-                            
-                            <div class="tab-pane" id="pairings-tab">
-                                <div class="pairings-container">
-                                    <h3>Stoliki - Runda ${eventData.currentRound || 1}</h3>
-                                    ${currentPairings?.pairs?.length > 0 ? `
-                                        <div class="pairings-grid">
-                                            ${currentPairings.pairs.map((pair, index) => {
-                                                const [user1, user2] = pair;
-                                                return `
-                                                    <div class="pairing-card">
-                                                        <div class="pairing-header">
-                                                            <h4><i class="fas fa-chair"></i> Stolik ${index + 1}</h4>
-                                                        </div>
-                                                        <div class="pairing-participants">
-                                                            <div class="participant">
-                                                                <div class="participant-avatar small" style="background: ${user1.avatarColor || '#667eea'}">
-                                                                    <i class="fas fa-user"></i>
-                                                                </div>
-                                                                <div class="participant-info">
-                                                                    <strong>${user1.username}</strong>
-                                                                    <span>${user1.gender === 'male' ? '♂' : user1.gender === 'female' ? '♀' : '⚧'}</span>
-                                                                </div>
-                                                            </div>
-                                                            <div class="pairing-connector">
-                                                                <i class="fas fa-heart"></i>
-                                                            </div>
-                                                            <div class="participant">
-                                                                <div class="participant-avatar small" style="background: ${user2.avatarColor || '#ff6b6b'}">
-                                                                    <i class="fas fa-user"></i>
-                                                                </div>
-                                                                <div class="participant-info">
-                                                                    <strong>${user2.username}</strong>
-                                                                    <span>${user2.gender === 'male' ? '♂' : user2.gender === 'female' ? '♀' : '⚧'}</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                `;
-                                            }).join('')}
-                                        </div>
-                                        ${currentPairings.breakTable?.length > 0 ? `
-                                            <div class="break-section">
-                                                <h4><i class="fas fa-coffee"></i> Osoby na przerwie (${currentPairings.breakTable.length})</h4>
-                                                <div class="break-list">
-                                                    ${currentPairings.breakTable.map(user => `
-                                                        <span class="break-user">
-                                                            <i class="fas fa-user"></i> ${user.username}
-                                                        </span>
-                                                    `).join('')}
-                                                </div>
-                                            </div>
-                                        ` : ''}
-                                    ` : `
-                                        <div class="empty-pairings">
-                                            <i class="fas fa-random"></i>
-                                            <p>Brak wygenerowanych par</p>
-                                        </div>
-                                    `}
-                                </div>
-                            </div>
-                            
-                            <div class="tab-pane" id="ratings-tab">
-                                <div class="ratings-container">
-                                    <h3>Wszystkie oceny (${ratingsCount})</h3>
-                                    ${ratingsCount > 0 ? `
-                                        <div class="ratings-stats">
-                                            <div class="stat-badge success">
-                                                <i class="fas fa-thumbs-up"></i>
-                                                <span>TAK: ${yesRatings}</span>
-                                            </div>
-                                            <div class="stat-badge danger">
-                                                <i class="fas fa-thumbs-down"></i>
-                                                <span>NIE: ${ratingsCount - yesRatings - (eventData.ratings?.filter(r => r.rating === 'maybe').length || 0)}</span>
-                                            </div>
-                                            <div class="stat-badge warning">
-                                                <i class="fas fa-question"></i>
-                                                <span>MOŻE: ${eventData.ratings?.filter(r => r.rating === 'maybe').length || 0}</span>
-                                            </div>
-                                        </div>
-                                        <div class="ratings-table-container">
-                                            <table class="ratings-table">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Od</th>
-                                                        <th>Do</th>
-                                                        <th>Ocena</th>
-                                                        <th>Runda</th>
-                                                        <th>Czas</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    ${eventData.ratings?.slice(0, 20).map(rating => {
-                                                        const fromUser = participants.find(p => p && p.id === rating.from);
-                                                        const toUser = participants.find(p => p && p.id === rating.to);
-                                                        const ratingDate = new Date(rating.timestamp);
-                                                        
-                                                        return `
-                                                            <tr>
-                                                                <td>${fromUser?.username || rating.from.substring(0, 8)}</td>
-                                                                <td>${toUser?.username || rating.to.substring(0, 8)}</td>
-                                                                <td>
-                                                                    <span class="rating-badge ${rating.rating}">
-                                                                        ${rating.rating === 'yes' ? 'TAK' : rating.rating === 'no' ? 'NIE' : 'MOŻE'}
-                                                                    </span>
-                                                                </td>
-                                                                <td>${rating.round}</td>
-                                                                <td>${ratingDate.toLocaleTimeString()}</td>
-                                                            </tr>
-                                                        `;
-                                                    }).join('')}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    ` : `
-                                        <div class="empty-ratings">
-                                            <i class="fas fa-star"></i>
-                                            <p>Brak ocen</p>
-                                        </div>
                                     `}
                                 </div>
                             </div>
@@ -1501,16 +780,9 @@ class SpeedDatingApp {
                                             <i class="fas fa-trash"></i> Wyczyść dane
                                         </button>
                                     </div>
-                                    <div class="export-info">
-                                        <p><i class="fas fa-info-circle"></i> Dane są automatycznie zapisywane w localStorage przeglądarki.</p>
-                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                    
-                    <div class="admin-footer">
-                        <p>Speed Dating Pro v${CONFIG.VERSION} | Panel administratora</p>
                     </div>
                 </div>
             </div>
@@ -1547,11 +819,6 @@ class SpeedDatingApp {
             this.updateAdminPanel();
         });
 
-        // Zapisywanie czasu
-        document.getElementById('save-time-btn')?.addEventListener('click', () => {
-            this.saveTimeSettings();
-        });
-
         // Przyciski eksportu
         document.getElementById('export-json')?.addEventListener('click', () => {
             this.exportData('json');
@@ -1579,7 +846,6 @@ class SpeedDatingApp {
     }
 
     switchAdminTab(tabId) {
-        // Aktualizuj aktywne zakładki
         document.querySelectorAll('.tab-btn').forEach(tab => {
             tab.classList.remove('active');
             if (tab.dataset.tab === tabId) {
@@ -1597,32 +863,6 @@ class SpeedDatingApp {
         }
     }
 
-    getParticipantStatus(userId) {
-        if (eventData.status === 'waiting') return 'Oczekuje';
-        if (eventData.status === 'finished') return 'Zakończono';
-        
-        const currentPairings = eventData.pairings?.[eventData.currentRound - 1];
-        if (!currentPairings) return 'Oczekuje';
-        
-        // Sprawdź czy jest w parze
-        if (currentPairings.pairs) {
-            for (const pair of currentPairings.pairs) {
-                if (pair && Array.isArray(pair)) {
-                    const found = pair.find(p => p && p.id === userId);
-                    if (found) return 'W parze';
-                }
-            }
-        }
-        
-        // Sprawdź czy jest na przerwie
-        if (currentPairings.breakTable) {
-            const found = currentPairings.breakTable.find(p => p && p.id === userId);
-            if (found) return 'Przerwa';
-        }
-        
-        return 'Oczekuje';
-    }
-
     // ========== ZARZĄDZANIE WYDARZENIEM ==========
     startEvent() {
         const activeParticipants = participants.filter(p => p && p.active !== false);
@@ -1633,10 +873,8 @@ class SpeedDatingApp {
         }
         
         if (confirm(`Rozpocząć wydarzenie z ${activeParticipants.length} uczestnikami?`)) {
-            // Wygeneruj pary
             this.generateSmartPairings();
             
-            // Ustaw status wydarzenia
             eventData.status = 'active';
             eventData.currentRound = 1;
             eventData.startedAt = new Date().toISOString();
@@ -1646,11 +884,6 @@ class SpeedDatingApp {
             
             this.showNotification(`Wydarzenie rozpoczęte! ${activeParticipants.length} uczestników.`, 'success');
             this.updateAdminPanel();
-            
-            // Jeśli jesteśmy w panelu użytkownika, zaktualizuj też tam
-            if (currentUser) {
-                this.updateUserContent();
-            }
         }
     }
 
@@ -1667,11 +900,6 @@ class SpeedDatingApp {
         this.updateAdminPanel();
         
         this.showNotification(`Rozpoczynasz rundę ${eventData.currentRound}`, 'info');
-        
-        // Aktualizuj panel użytkownika jeśli jest aktywny
-        if (currentUser) {
-            this.updateUserContent();
-        }
     }
 
     endEvent() {
@@ -1688,29 +916,6 @@ class SpeedDatingApp {
             this.updateAdminPanel();
             
             this.showNotification('Wydarzenie zakończone!', 'success');
-            
-            // Aktualizuj panel użytkownika jeśli jest aktywny
-            if (currentUser) {
-                this.updateUserContent();
-            }
-        }
-    }
-
-    saveTimeSettings() {
-        try {
-            const roundTimeInput = document.getElementById('round-time');
-            const ratingTimeInput = document.getElementById('rating-time');
-            const totalRoundsInput = document.getElementById('total-rounds');
-            
-            if (roundTimeInput) eventData.roundTime = parseInt(roundTimeInput.value) || 5;
-            if (ratingTimeInput) eventData.ratingTime = parseInt(ratingTimeInput.value) || 2;
-            if (totalRoundsInput) eventData.totalRounds = parseInt(totalRoundsInput.value) || 5;
-            
-            this.saveData();
-            this.showNotification('Ustawienia czasu zapisane!', 'success');
-        } catch (error) {
-            console.error('Błąd zapisywania ustawień:', error);
-            this.showNotification('Błąd zapisywania ustawień!', 'error');
         }
     }
 
@@ -1726,13 +931,6 @@ class SpeedDatingApp {
                 clearInterval(timerInterval);
                 timerInterval = null;
                 this.showNotification('Czas rundy minął!', 'warning');
-                
-                // Automatycznie przejdź do następnej rundy jeśli to nie ostatnia
-                if (eventData.currentRound < eventData.totalRounds) {
-                    setTimeout(() => {
-                        this.nextRound();
-                    }, 3000);
-                }
             }
         }, 1000);
     }
@@ -1771,9 +969,7 @@ class SpeedDatingApp {
             }
 
             const pairings = [];
-            const usedPairs = new Set();
             
-            // Generuj pary dla każdej rundy
             for (let round = 1; round <= eventData.totalRounds; round++) {
                 const roundPairings = {
                     round: round,
@@ -1781,34 +977,22 @@ class SpeedDatingApp {
                     breakTable: []
                 };
 
-                // Kopiuj i przetasuj uczestników
                 const shuffled = [...activeParticipants].sort(() => Math.random() - 0.5);
                 const pairedIds = new Set();
 
-                // Prosty algorytm dopasowywania
                 for (let i = 0; i < shuffled.length; i++) {
                     if (pairedIds.has(shuffled[i].id)) continue;
 
-                    // Znajdź nieparowanego partnera
                     for (let j = i + 1; j < shuffled.length; j++) {
                         if (pairedIds.has(shuffled[j].id)) continue;
 
-                        // Sprawdź czy ta para już się spotkała
-                        const pairKey = [shuffled[i].id, shuffled[j].id].sort().join('_');
-                        if (usedPairs.has(pairKey) && !eventData.settings?.allowRepeats) {
-                            continue;
-                        }
-
-                        // Utwórz parę
                         roundPairings.pairs.push([shuffled[i], shuffled[j]]);
                         pairedIds.add(shuffled[i].id);
                         pairedIds.add(shuffled[j].id);
-                        usedPairs.add(pairKey);
                         break;
                     }
                 }
 
-                // Dodaj pozostałych do przerwy
                 shuffled.forEach(p => {
                     if (!pairedIds.has(p.id)) {
                         roundPairings.breakTable.push(p);
@@ -1836,10 +1020,8 @@ class SpeedDatingApp {
         this.hideAllScreens();
         currentPartner = partner;
         
-        const ratingScreen = document.getElementById('rating-screen');
-        if (ratingScreen) ratingScreen.classList.add('active');
+        document.getElementById('rating-screen').classList.add('active');
         
-        // Aktualizuj UI
         const ratePerson = document.getElementById('rate-person');
         if (ratePerson) ratePerson.textContent = partner.username;
         
@@ -1849,76 +1031,17 @@ class SpeedDatingApp {
     initializeRatingScreen() {
         let selectedRating = null;
         
-        // Obsługa wyboru oceny
-        document.querySelectorAll('.rating-option').forEach(option => {
-            option.addEventListener('click', () => {
-                document.querySelectorAll('.rating-option').forEach(o => o.classList.remove('selected'));
-                option.classList.add('selected');
-                selectedRating = option.dataset.rating;
-                this.updateSubmitButton();
+        document.querySelectorAll('.rate-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.rate-btn').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                selectedRating = btn.dataset.rating;
             });
         });
         
-        // Timer oceniania
-        ratingTimeLeft = (eventData.ratingTime || 2) * 60;
-        this.updateRatingTimer();
-        
-        ratingTimerInterval = setInterval(() => {
-            ratingTimeLeft--;
-            this.updateRatingTimer();
-            
-            if (ratingTimeLeft <= 0) {
-                clearInterval(ratingTimerInterval);
-                this.autoSubmitRating();
-            }
-        }, 1000);
-        
-        // Przyciski akcji
-        const skipBtn = document.getElementById('skip-rating');
-        const submitBtn = document.getElementById('submit-rating');
-        
-        if (skipBtn) {
-            skipBtn.addEventListener('click', () => {
-                this.skipRating();
-            });
-        }
-        
-        if (submitBtn) {
-            submitBtn.addEventListener('click', () => {
-                this.submitRating(selectedRating);
-            });
-        }
-    }
-
-    updateRatingTimer() {
-        const timerElement = document.getElementById('rating-timer');
-        if (timerElement) {
-            timerElement.textContent = this.formatTime(ratingTimeLeft);
-        }
-    }
-
-    updateSubmitButton() {
-        const submitBtn = document.getElementById('submit-rating');
-        if (submitBtn) {
-            submitBtn.disabled = false;
-        }
-    }
-
-    skipRating() {
-        if (confirm('Czy na pewno chcesz pominąć ocenę tej osoby?')) {
-            this.showUserPanel();
-        }
-    }
-
-    autoSubmitRating() {
-        // Automatycznie wybierz "MOŻE" jeśli nie wybrano oceny
-        const maybeOption = document.querySelector('.rating-option[data-rating="maybe"]');
-        if (maybeOption) {
-            maybeOption.click();
-            setTimeout(() => {
-                this.submitRating('maybe');
-            }, 500);
-        }
+        document.getElementById('submit-rating').addEventListener('click', () => {
+            this.submitRating(selectedRating);
+        });
     }
 
     submitRating(rating) {
@@ -1929,7 +1052,6 @@ class SpeedDatingApp {
 
         const note = document.getElementById('rating-note')?.value || '';
         
-        // Zapisz ocenę użytkownika
         if (!currentUser.ratings) currentUser.ratings = {};
         currentUser.ratings[currentPartner.id] = {
             rating: rating,
@@ -1938,7 +1060,6 @@ class SpeedDatingApp {
             timestamp: new Date().toISOString()
         };
 
-        // Zapisz ocenę w globalnych danych wydarzenia
         if (!eventData.ratings) eventData.ratings = [];
         eventData.ratings.push({
             from: currentUser.id,
@@ -1948,7 +1069,6 @@ class SpeedDatingApp {
             timestamp: new Date().toISOString()
         });
 
-        // Aktualizuj dane
         const userIndex = participants.findIndex(p => p && p.id === currentUser.id);
         if (userIndex !== -1) {
             participants[userIndex] = currentUser;
@@ -1956,11 +1076,6 @@ class SpeedDatingApp {
 
         this.saveData();
         
-        // Wyczyść timer
-        if (ratingTimerInterval) {
-            clearInterval(ratingTimerInterval);
-        }
-
         this.showNotification('Ocena zapisana! Dziękujemy!', 'success');
         setTimeout(() => {
             this.showUserPanel();
@@ -1979,13 +1094,10 @@ class SpeedDatingApp {
             
             const filename = `speed-dating-${new Date().toISOString().slice(0,10)}`;
             
-            switch(format) {
-                case 'json':
-                    this.exportJSON(exportData, filename);
-                    break;
-                case 'excel':
-                    this.exportExcel(exportData, filename);
-                    break;
+            if (format === 'json') {
+                this.exportJSON(exportData, filename);
+            } else if (format === 'excel') {
+                this.exportExcel(exportData, filename);
             }
             
         } catch (error) {
@@ -2010,7 +1122,6 @@ class SpeedDatingApp {
 
     exportExcel(data, filename) {
         try {
-            // Przygotuj dane uczestników
             const participantsData = data.participants.map(p => ({
                 'ID': p.id,
                 'Nazwa': p.username,
@@ -2024,35 +1135,10 @@ class SpeedDatingApp {
                 'Status': p.active ? 'Aktywny' : 'Nieaktywny'
             }));
             
-            // Przygotuj dane ocen
-            const ratingsData = (data.event.ratings || []).map(r => {
-                const fromUser = data.participants.find(p => p.id === r.from);
-                const toUser = data.participants.find(p => p.id === r.to);
-                
-                return {
-                    'Od': fromUser?.username || r.from,
-                    'Do': toUser?.username || r.to,
-                    'Ocena': r.rating === 'yes' ? 'TAK' : r.rating === 'no' ? 'NIE' : 'MOŻE',
-                    'Runda': r.round,
-                    'Czas': new Date(r.timestamp).toLocaleString(),
-                    'Notatki': r.note || '-'
-                };
-            });
-            
-            // Utwórz skoroszyt
             const wb = XLSX.utils.book_new();
-            
-            // Arkusz uczestników
             const wsParticipants = XLSX.utils.json_to_sheet(participantsData);
             XLSX.utils.book_append_sheet(wb, wsParticipants, 'Uczestnicy');
             
-            // Arkusz ocen
-            if (ratingsData.length > 0) {
-                const wsRatings = XLSX.utils.json_to_sheet(ratingsData);
-                XLSX.utils.book_append_sheet(wb, wsRatings, 'Oceny');
-            }
-            
-            // Zapisz plik
             XLSX.writeFile(wb, `${filename}.xlsx`);
             
             this.showNotification('Dane wyeksportowane jako Excel!', 'success');
@@ -2065,31 +1151,24 @@ class SpeedDatingApp {
 
     // ========== SYSTEM POWIADOMIEŃ ==========
     showNotification(message, type = 'info') {
-        // Użyj toastr jeśli dostępny
-        if (typeof toastr !== 'undefined') {
-            switch(type) {
-                case 'success':
-                    toastr.success(message);
-                    break;
-                case 'error':
-                    toastr.error(message);
-                    break;
-                case 'warning':
-                    toastr.warning(message);
-                    break;
-                default:
-                    toastr.info(message);
-                    break;
-            }
-        } else {
-            // Fallback do alertu
-            alert(`${type.toUpperCase()}: ${message}`);
+        switch(type) {
+            case 'success':
+                toastr.success(message);
+                break;
+            case 'error':
+                toastr.error(message);
+                break;
+            case 'warning':
+                toastr.warning(message);
+                break;
+            default:
+                toastr.info(message);
+                break;
         }
     }
 
     // ========== SYSTEM POŁĄCZENIA ==========
     startHeartbeat() {
-        // Symulacja połączenia WebSocket
         heartbeatTimer = setInterval(() => {
             this.updateConnectionStatus();
             
@@ -2100,23 +1179,7 @@ class SpeedDatingApp {
     }
 
     updateConnectionStatus() {
-        // Symulacja statusu połączenia
-        connectionStatus = Math.random() > 0.1; // 90% szans na połączenie
-        
-        const icon = document.getElementById('connection-icon');
-        const statusText = document.getElementById('connection-status');
-        
-        if (icon && statusText) {
-            if (connectionStatus) {
-                icon.className = 'fas fa-wifi';
-                icon.style.color = '#10b981';
-                statusText.textContent = 'Połączono';
-            } else {
-                icon.className = 'fas fa-wifi-slash';
-                icon.style.color = '#ef4444';
-                statusText.textContent = 'Rozłączono';
-            }
-        }
+        connectionStatus = Math.random() > 0.1;
     }
 
     updateUserLastSeen() {
@@ -2163,72 +1226,6 @@ class SpeedDatingApp {
         document.body.innerHTML = errorHTML;
     }
 
-    updateFooter() {
-        const footerRound = document.getElementById('footer-round');
-        const footerTotalRounds = document.getElementById('footer-total-rounds');
-        const footerTime = document.getElementById('footer-time');
-        
-        if (footerRound) footerRound.textContent = eventData.currentRound || 1;
-        if (footerTotalRounds) footerTotalRounds.textContent = eventData.totalRounds || 5;
-        
-        if (footerTime) {
-            if (eventData.status === 'active') {
-                const totalSeconds = (eventData.roundTime || 5) * 60;
-                footerTime.textContent = this.formatTime(totalSeconds);
-            } else {
-                footerTime.textContent = '--:--';
-            }
-        }
-    }
-
-    setupUserPanelListeners() {
-        // Przycisk menu
-        const menuBtn = document.getElementById('user-menu-btn');
-        if (menuBtn) {
-            menuBtn.addEventListener('click', () => {
-                const sidebar = document.getElementById('user-sidebar');
-                if (sidebar) sidebar.classList.add('open');
-            });
-        }
-
-        // Przycisk zamykania menu
-        const closeBtn = document.getElementById('close-sidebar');
-        if (closeBtn) {
-            closeBtn.addEventListener('click', () => {
-                const sidebar = document.getElementById('user-sidebar');
-                if (sidebar) sidebar.classList.remove('open');
-            });
-        }
-
-        // Nawigacja w menu
-        document.querySelectorAll('.nav-item').forEach(item => {
-            item.addEventListener('click', (e) => {
-                e.preventDefault();
-                
-                // Usuń aktywną klasę ze wszystkich elementów
-                document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-                
-                // Dodaj aktywną klasę do klikniętego elementu
-                item.classList.add('active');
-                
-                // Zamknij menu na mobile
-                const sidebar = document.getElementById('user-sidebar');
-                if (sidebar) sidebar.classList.remove('open');
-                
-                // Załaduj odpowiednią sekcję
-                this.updateUserContent();
-            });
-        });
-
-        // Przycisk wylogowania
-        const logoutBtn = document.getElementById('user-logout');
-        if (logoutBtn) {
-            logoutBtn.addEventListener('click', () => {
-                this.handleLogout();
-            });
-        }
-    }
-
     handleLogout() {
         if (confirm('Czy na pewno chcesz się wylogować?')) {
             if (currentUser) {
@@ -2249,11 +1246,13 @@ class SpeedDatingApp {
     }
 
     setupEventListeners() {
-        // Obsługa wyboru trybu
-        document.querySelectorAll('.mode-select-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const mode = btn.dataset.mode;
-                this.handleModeSelection(mode);
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('.mode-select-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const mode = btn.dataset.mode;
+                    this.handleModeSelection(mode);
+                });
             });
         });
     }
@@ -2275,7 +1274,6 @@ class SpeedDatingApp {
     startDemoMode() {
         isDemoMode = true;
         
-        // Utwórz demo użytkownika
         currentUser = {
             id: 'demo_user_' + Date.now(),
             username: 'DemoUżytkownik',
@@ -2294,7 +1292,6 @@ class SpeedDatingApp {
             avatarColor: '#667eea'
         };
         
-        // Utwórz demo dane wydarzenia
         eventData = {
             status: 'active',
             currentRound: 1,
@@ -2313,7 +1310,6 @@ class SpeedDatingApp {
             updatedAt: new Date().toISOString()
         };
         
-        // Dodaj kilku demo uczestników
         this.addDemoUsers();
         
         this.showNotification('Tryb demo aktywowany!', 'success');
@@ -2343,9 +1339,7 @@ class SpeedDatingApp {
         ];
 
         demoUsers.forEach(demoUser => {
-            const existing = participants.find(p => 
-                p && p.email === demoUser.email
-            );
+            const existing = participants.find(p => p && p.email === demoUser.email);
             
             if (!existing) {
                 const newUser = {
