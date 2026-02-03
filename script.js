@@ -1424,7 +1424,434 @@ function addGlobalStyles() {
     `;
     document.head.appendChild(style);
 }
+// ========== DODAJ BRAKUJĄCE FUNKCJE ==========
 
+// Funkcja do pobierania statusu uczestnika
+function getParticipantStatus(userId) {
+    if (!eventData || !userId) return 'Brak danych';
+    
+    if (eventData.status === 'waiting') return 'Oczekuje';
+    if (eventData.status === 'finished') return 'Zakończono';
+    
+    if (!eventData.pairings || eventData.pairings.length === 0) {
+        return 'Oczekuje';
+    }
+    
+    const currentPairings = eventData.pairings[eventData.currentRound - 1];
+    if (!currentPairings) return 'Oczekuje';
+    
+    // Sprawdź czy w parach
+    if (currentPairings.pairs) {
+        for (const pair of currentPairings.pairs) {
+            if (pair && Array.isArray(pair)) {
+                const found = pair.find(p => p && p.id === userId);
+                if (found) return 'W parze';
+            }
+        }
+    }
+    
+    // Sprawdź czy na przerwie
+    if (currentPairings.breakTable && Array.isArray(currentPairings.breakTable)) {
+        const found = currentPairings.breakTable.find(p => p && p.id === userId);
+        if (found) return 'Przerwa';
+    }
+    
+    return 'Oczekuje';
+}
+
+// Funkcja do pokazywania ekranu oceniania
+function showRatingScreen(partner) {
+    hideAllScreens();
+    
+    const ratingScreen = document.getElementById('rating-screen');
+    if (!ratingScreen) {
+        console.error('Brak ekranu oceniania');
+        return;
+    }
+    
+    ratingScreen.classList.add('active');
+    
+    // Zaktualizuj nazwę osoby do oceny
+    const ratePerson = document.getElementById('rate-person');
+    if (ratePerson && partner) {
+        ratePerson.textContent = partner.username || 'Rozmówca';
+    }
+    
+    // Zresetuj wybór
+    let selectedRating = null;
+    
+    // Obsługa przycisków oceny
+    document.querySelectorAll('.rate-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.rate-btn').forEach(b => b.classList.remove('selected'));
+            this.classList.add('selected');
+            selectedRating = this.dataset.rating;
+        });
+    });
+    
+    // Obsługa wysłania oceny
+    const submitBtn = document.getElementById('submit-rating');
+    if (submitBtn) {
+        submitBtn.addEventListener('click', function() {
+            if (!selectedRating) {
+                alert('Wybierz ocenę (TAK lub NIE)!');
+                return;
+            }
+            
+            if (!currentUser || !partner) {
+                alert('Błąd danych użytkownika!');
+                return;
+            }
+            
+            // Zapisz ocenę
+            if (!currentUser.ratings) currentUser.ratings = {};
+            currentUser.ratings[partner.id] = {
+                rating: selectedRating,
+                note: document.getElementById('rating-note')?.value || '',
+                round: eventData.currentRound || 1,
+                timestamp: new Date().toISOString()
+            };
+            
+            // Zaktualizuj dane użytkownika
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            
+            // Zaktualizuj w głównej liście
+            const userIndex = participants.findIndex(p => p && p.id === currentUser.id);
+            if (userIndex !== -1) {
+                participants[userIndex] = currentUser;
+                localStorage.setItem('speedDatingParticipants', JSON.stringify(participants));
+            }
+            
+            // Zapisz ocenę w danych wydarzenia
+            if (!eventData.ratings) eventData.ratings = [];
+            eventData.ratings.push({
+                from: currentUser.id,
+                to: partner.id,
+                rating: selectedRating,
+                round: eventData.currentRound || 1,
+                timestamp: new Date().toISOString()
+            });
+            localStorage.setItem('speedDatingEvent', JSON.stringify(eventData));
+            
+            alert('Dziękujemy za ocenę!');
+            showUserPanel();
+        });
+    }
+}
+
+// Funkcja do aktualizacji interfejsu admina
+function updateAdminInterface() {
+    console.log('Aktualizacja interfejsu admina...');
+    
+    try {
+        // Pobierz świeże dane
+        initializeData();
+        
+        const activeParticipants = participants.filter(p => p && p.active !== false);
+        
+        // Aktualizuj liczniki
+        updateCounter('participant-count', `${activeParticipants.length}/50`);
+        updateCounter('current-round-display', eventData.currentRound || 1);
+        updateCounter('anim-round', eventData.currentRound || 1);
+        updateCounter('total-rounds-display', eventData.totalRounds || 3);
+        
+        // Aktualizuj statystyki
+        updateStatistics();
+        
+        // Aktualizuj listę uczestników
+        updateParticipantsList(activeParticipants);
+        
+        // Aktualizuj animację stolików
+        updateTablesAnimation();
+        
+        // Aktualizuj timer
+        updateMainTimerDisplay();
+        
+        console.log('Interfejs admina zaktualizowany');
+    } catch (error) {
+        console.error('Błąd aktualizacji interfejsu admina:', error);
+        showNotification('Błąd aktualizacji interfejsu: ' + error.message, 'error');
+    }
+}
+
+// Funkcja do aktualizowania pojedynczego licznika
+function updateCounter(elementId, value) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.textContent = value;
+    }
+}
+
+// Funkcja do aktualizacji statystyk
+function updateStatistics() {
+    const activeParticipants = participants.filter(p => p && p.active !== false);
+    
+    // Oblicz statystyki
+    let pairsCount = 0;
+    let breakCount = 0;
+    let yesCount = 0;
+    let matchesCount = 0;
+    
+    if (eventData.pairings && eventData.pairings.length > 0) {
+        const currentPairings = eventData.pairings[eventData.currentRound - 1];
+        if (currentPairings) {
+            pairsCount = currentPairings.pairs ? currentPairings.pairs.length : 0;
+            breakCount = currentPairings.breakTable ? currentPairings.breakTable.length : 0;
+        }
+    }
+    
+    if (eventData.ratings && Array.isArray(eventData.ratings)) {
+        yesCount = eventData.ratings.filter(r => r && r.rating === 'yes').length;
+        
+        // Oblicz wzajemne dopasowania
+        const mutualMatches = {};
+        eventData.ratings.forEach(rating => {
+            if (rating && rating.rating === 'yes') {
+                const pairKey = `${Math.min(rating.from, rating.to)}-${Math.max(rating.from, rating.to)}`;
+                if (!mutualMatches[pairKey]) {
+                    mutualMatches[pairKey] = { count: 0 };
+                }
+                mutualMatches[pairKey].count++;
+            }
+        });
+        
+        matchesCount = Object.values(mutualMatches).filter(match => match.count === 2).length;
+    }
+    
+    // Aktualizuj wyświetlane wartości
+    updateCounter('pairs-count', pairsCount);
+    updateCounter('break-count', breakCount);
+    updateCounter('yes-count', yesCount);
+    
+    // Jeśli istnieje licznik dopasowań, zaktualizuj go
+    const matchesElement = document.getElementById('matches-count');
+    if (matchesElement) {
+        matchesElement.textContent = matchesCount;
+    }
+}
+
+// Funkcja do aktualizacji listy uczestników
+function updateParticipantsList(activeParticipants) {
+    const participantsList = document.getElementById('participants-list');
+    if (!participantsList) {
+        console.error('Element participants-list nie znaleziony');
+        return;
+    }
+    
+    if (activeParticipants.length === 0) {
+        participantsList.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #666;">
+                <i class="fas fa-users" style="font-size: 40px; margin-bottom: 15px;"></i>
+                <p>Brak uczestników</p>
+                <p style="font-size: 14px;">Uczestnicy pojawią się po rejestracji</p>
+            </div>
+        `;
+        return;
+    }
+    
+    participantsList.innerHTML = activeParticipants.map(p => {
+        if (!p) return '';
+        
+        const status = getParticipantStatus(p.id);
+        const isOnline = isUserOnline(p.lastSeen);
+        const genderColor = p.gender === 'male' ? '#4CAF50' : '#E91E63';
+        const genderText = p.gender === 'male' ? 'Mężczyzna' : 'Kobieta';
+        
+        return `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; margin-bottom: 8px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid ${genderColor};">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-size: 14px;">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div>
+                        <div style="font-weight: bold; color: #333;">${p.username || 'Brak nazwy'}</div>
+                        <div style="font-size: 12px; color: #666;">
+                            ${p.email || 'Brak email'} • ${genderText}
+                        </div>
+                        <div style="font-size: 11px; color: #888; margin-top: 2px;">
+                            <i class="fas fa-heart"></i> Szuka: ${Array.isArray(p.interested) ? p.interested.join(', ') : (p.interested || 'Brak danych')}
+                        </div>
+                    </div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 11px; padding: 4px 8px; background: ${getStatusColor(p.id)}; color: white; border-radius: 12px; margin-bottom: 4px;">
+                        ${status}
+                    </div>
+                    <div style="font-size: 10px; color: #666;">
+                        ${isOnline ? '🟢 Online' : '⚫ Ostatnio widziany'}
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Funkcja do pobierania koloru statusu
+function getStatusColor(userId) {
+    if (!eventData || eventData.status !== 'active') return '#666';
+    
+    if (eventData.pairings && eventData.pairings[eventData.currentRound - 1]) {
+        const roundPairings = eventData.pairings[eventData.currentRound - 1];
+        
+        // Sprawdź czy w parach
+        if (roundPairings.pairs && Array.isArray(roundPairings.pairs)) {
+            for (const pair of roundPairings.pairs) {
+                if (pair && Array.isArray(pair)) {
+                    const found = pair.find(p => p && p.id === userId);
+                    if (found) return '#4CAF50'; // Zielony - w parze
+                }
+            }
+        }
+        
+        // Sprawdź czy na przerwie
+        if (roundPairings.breakTable && Array.isArray(roundPairings.breakTable)) {
+            const found = roundPairings.breakTable.find(p => p && p.id === userId);
+            if (found) return '#FF9800'; // Pomarańczowy - przerwa
+        }
+    }
+    
+    return '#666'; // Szary - oczekuje
+}
+
+// Funkcja do sprawdzania czy użytkownik jest online
+function isUserOnline(lastSeen) {
+    if (!lastSeen) return false;
+    try {
+        const lastSeenTime = new Date(lastSeen).getTime();
+        const now = Date.now();
+        return (now - lastSeenTime) < 300000; // 5 minut
+    } catch (error) {
+        return false;
+    }
+}
+
+// Funkcja do aktualizacji animacji stolików
+function updateTablesAnimation() {
+    const animationContainer = document.getElementById('tables-animation');
+    if (!animationContainer) {
+        console.error('Element tables-animation nie znaleziony');
+        return;
+    }
+    
+    if (eventData.status !== 'active' || !eventData.pairings || eventData.pairings.length === 0) {
+        animationContainer.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #666;">
+                <i class="fas fa-chair" style="font-size: 40px; margin-bottom: 15px;"></i>
+                <p>Brak aktywnych stolików</p>
+                <p style="font-size: 14px;">Stoliki pojawią się po rozpoczęciu wydarzenia</p>
+            </div>
+        `;
+        return;
+    }
+    
+    const currentPairings = eventData.pairings[eventData.currentRound - 1];
+    if (!currentPairings) {
+        animationContainer.innerHTML = `
+            <div style="text-align: center; padding: 20px; color: #666;">
+                <p>Brak danych dla rundy ${eventData.currentRound}</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let tablesHTML = '';
+    
+    // Pokaż pary
+    if (currentPairings.pairs && Array.isArray(currentPairings.pairs) && currentPairings.pairs.length > 0) {
+        currentPairings.pairs.forEach((pair, index) => {
+            if (pair && Array.isArray(pair) && pair.length === 2) {
+                tablesHTML += `
+                    <div style="background: white; border-radius: 10px; padding: 15px; margin-bottom: 15px; border: 2px solid #e0e0e0; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <div style="font-weight: bold; color: #667eea; font-size: 14px;">
+                                <i class="fas fa-chair"></i> Stolik ${index + 1}
+                            </div>
+                            <div style="font-size: 12px; color: #666;">Runda ${eventData.currentRound}</div>
+                        </div>
+                        <div style="display: flex; justify-content: space-around; gap: 20px;">
+                            ${pair.map(person => {
+                                if (!person) return '';
+                                const genderIcon = person.gender === 'male' ? '♂' : '♀';
+                                const genderColor = person.gender === 'male' ? '#4CAF50' : '#E91E63';
+                                return `
+                                    <div style="text-align: center; flex: 1;">
+                                        <div style="width: 40px; height: 40px; border-radius: 50%; background: ${genderColor}; display: flex; align-items: center; justify-content: center; color: white; margin: 0 auto 8px; font-size: 20px;">
+                                            ${genderIcon}
+                                        </div>
+                                        <div style="font-weight: bold; font-size: 14px;">${person.username || 'Brak nazwy'}</div>
+                                        <div style="font-size: 12px; color: #666;">
+                                            ${person.gender === 'male' ? 'Mężczyzna' : 'Kobieta'}
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+        });
+    }
+    
+    // Pokaż stolik przerw
+    if (currentPairings.breakTable && Array.isArray(currentPairings.breakTable) && currentPairings.breakTable.length > 0) {
+        tablesHTML += `
+            <div style="background: #FFF3E0; border-radius: 10px; padding: 15px; border: 2px solid #FFE0B2; margin-top: 10px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <div style="font-weight: bold; color: #FF9800; font-size: 14px;">
+                        <i class="fas fa-coffee"></i> Przerwa
+                    </div>
+                    <div style="font-size: 12px; color: #666;">${currentPairings.breakTable.length} osoba(y)</div>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                    ${currentPairings.breakTable.map(person => {
+                        if (!person) return '';
+                        return `
+                            <div style="padding: 6px 12px; background: white; border-radius: 15px; font-size: 12px; border: 1px solid #FFE0B2; display: flex; align-items: center; gap: 5px;">
+                                <i class="fas fa-user" style="color: #FF9800;"></i>
+                                ${person.username || 'Brak nazwy'}
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    }
+    
+    if (!tablesHTML) {
+        tablesHTML = `
+            <div style="text-align: center; padding: 20px; color: #666;">
+                <p>Brak stolików w tej rundzie</p>
+            </div>
+        `;
+    }
+    
+    animationContainer.innerHTML = tablesHTML;
+}
+
+// ========== DODAJ TE FUNKCJE DO GLOBALNEGO ZAKRESU ==========
+// Upewnij się, że funkcje są dostępne globalnie
+window.getParticipantStatus = getParticipantStatus;
+window.showRatingScreen = showRatingScreen;
+window.updateAdminInterface = updateAdminInterface;
+window.updateCounter = updateCounter;
+window.updateStatistics = updateStatistics;
+window.updateParticipantsList = updateParticipantsList;
+window.getStatusColor = getStatusColor;
+window.isUserOnline = isUserOnline;
+window.updateTablesAnimation = updateTablesAnimation;
+
+// Dodaj także inne funkcje, które mogą być potrzebne
+window.generateSmartPairings = generateSmartPairings;
+window.saveTimeSettings = saveTimeSettings;
+window.startEvent = startEvent;
+window.nextRound = nextRound;
+window.endEvent = endEvent;
+window.toggleTimer = toggleTimer;
+window.resetTimer = resetTimer;
+window.exportData = exportData;
+window.clearAllData = clearAllData;
+window.copyToClipboard = copyToClipboard;
+window.showNotification = showNotification;
 // ========== URUCHOMIENIE APLIKACJI ==========
 // Rozpocznij aplikację
 initApp();
@@ -1432,3 +1859,4 @@ initApp();
 // Dodaj globalne funkcje
 window.copyToClipboard = copyToClipboard;
 window.updateAdminInterface = updateAdminInterface;
+
